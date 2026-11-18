@@ -1,5 +1,5 @@
 # Baji Market website
-baji-market-website.soumya-pal-webskitters.workers.dev
+`baji-market-website.soumya-pal-webskitters.workers.dev`
 
 A separate, single-page Next.js website. The existing product-management-system is unchanged.
 

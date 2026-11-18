@@ -7,19 +7,24 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/commerce.test.mjs"
+    "test": "node --experimental-strip-types --test tests/commerce.test.mjs",
+    "build:cloudflare": "opennextjs-cloudflare build",
+    "preview": "npm run build:cloudflare && opennextjs-cloudflare preview",
+    "deploy": "npm run build:cloudflare && OPEN_NEXT_DEPLOY=true wrangler deploy"
   },
   "dependencies": {
+    "@opennextjs/cloudflare": "^1.20.17",
+    "lenis": "^1.3.0",
     "next": "16.4.6",
     "react": "19.3.1",
-    "react-dom": "19.3.1",
-    "lenis": "^1.3.0"
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
-    "typescript": "^5.9.3",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.160.0"
   },
   "type": "module"
 }

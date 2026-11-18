@@ -45,7 +45,22 @@ Navigation, collection, bag, About, FAQ, contact, Terms and Privacy are all on `
 
 Before publishing, set `NEXT_PUBLIC_SITE_URL` to the real domain and review the draft policies. Without a configured domain, indexing is disabled. Canonical metadata, Open Graph image, Twitter card, Organization structured data, robots and sitemap are included. All illustrations are local assets; real product images come from the catalogue.
 
-## Verification
+## Cloudflare deployment
+
+The storefront deploys as the separate `baji-market-website` Worker using OpenNext:
+https://baji-market-website.soumya-pal-webskitters.workers.dev
+
+```sh
+npm run deploy
+```
+
+Set `NEXT_PUBLIC_SITE_URL` in `.env.production` to that URL (or the custom domain) before building. Keep `SHOP_WHATSAPP` in `.env.local`; OpenNext includes the server environment in its Worker bundle. Do not commit environment files or `.open-next`. The existing catalogue Worker and D1 database are accessed through the public API and are not modified by this deployment.
+
+`npm run preview` builds and runs the Cloudflare version locally on systems supported by the Workers runtime.
+
+Deployment uses `OPEN_NEXT_DEPLOY=true wrangler deploy` to upload the built bundle directly, avoiding OpenNext's local runtime initialization on macOS 12. The storefront uses uncached catalogue requests and does not configure an incremental cache backend.
+
+## Checks
 
 ```sh
 npm test

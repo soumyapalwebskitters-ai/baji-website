@@ -2,6 +2,9 @@ import type { Metadata, Viewport } from "next";
 import { site } from "@/data/site";
 import "lenis/dist/lenis.css";
 import "./globals.css";
+import SparkleCursor from "@/components/SparkleCursor";
+import CustomCursor from "@/components/CustomCursor";
+import ConfettiEffect from "@/components/ConfettiEffect";
 
 export const metadata: Metadata = {
   metadataBase: new URL(site.url),
@@ -14,5 +17,5 @@ export const metadata: Metadata = {
 };
 export const viewport: Viewport = { themeColor: "#153d31", width: "device-width", initialScale: 1 };
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body>{children}</body></html>;
+  return <html lang="en"><body><SparkleCursor /><CustomCursor /><ConfettiEffect />{children}</body></html>;
 }

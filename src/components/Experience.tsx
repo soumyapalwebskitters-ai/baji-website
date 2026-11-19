@@ -107,13 +107,13 @@ export function Contact({ seller }: { seller: Catalog['seller'] | undefined }) {
 
 
 const BANNER_SLIDES = [
-  { type: "video", src: "/videos/banner-145094.mp4" },
-  { type: "video", src: "/videos/fireworks.mp4" },
-  { type: "video", src: "/videos/312954_large.mp4" },
-  { type: "video", src: "/videos/144735-785264999_medium.mp4" },
-  { type: "image", src: "/images/pexels-new-years-eve-1283521_1920.jpg" },
-  { type: "image", src: "/images/shantanukashyap-firework-2869251_1920.jpg" },
-  { type: "image", src: "/images/sandeepan-fireworks-614268_1920.jpg" },
+  { type: "video", src: "/api/banner-video?id=1VIFSHeXNrz0uLuugzlPBy9OIC8kHGOCF" },
+  { type: "video", src: "/api/banner-video?id=12zkM7CRfm6Oq6cDVDMFQo_wiF_zbKR6I" },
+  { type: "video", src: "/api/banner-video?id=1nZQ489DgKAsjVAnaNdfJg3ndVujgBsX-" },
+  { type: "video", src: "/api/banner-video?id=1-0cWzrI4DeMdxKBJPyggBdM004oT85zZ" },
+  { type: "image", src: "https://drive.google.com/thumbnail?id=19SvPjOMKehcajqeYBRaJoCErGsfjLAxs&sz=w1920" },
+  { type: "image", src: "https://drive.google.com/thumbnail?id=1EpckF7ngBxv10KIhJGeUFq4ZyDZ2ym56&sz=w1920" },
+  { type: "image", src: "https://drive.google.com/thumbnail?id=1PDRX-w0knYyYerdwVeIBS0lSaKA5GAAU&sz=w1920" },
 ];
 
 export function FireworksBanner() {
@@ -158,9 +158,9 @@ export function FireworksBanner() {
 
   return <section id="home" className="hero" aria-roledescription="carousel" aria-label="Celebration highlights">
     <div className="hero-art">
-      <img src="/images/shantanukashyap-firework-2869251_1920.jpg" alt="" fetchPriority="high" />
+      <img src="https://drive.google.com/thumbnail?id=19SvPjOMKehcajqeYBRaJoCErGsfjLAxs&sz=w1920" alt="" fetchPriority="high" />
       <motion.div key={slide.src} className="hero-media" initial={{ opacity: reducedMotion ? 1 : 0 }} animate={{ opacity: 1 }} transition={{ duration: reducedMotion ? 0 : .9 }}>
-        {slide.type === "video" ? <video ref={video} className={`hero-video${failed ? ' is-unavailable' : ''}`} src={slide.src} poster="/images/shantanukashyap-firework-2869251_1920.jpg" autoPlay={!paused} muted playsInline loop preload="metadata" aria-hidden="true" onError={() => setFailed(true)} /> : <img className={`hero-video${failed ? ' is-unavailable' : ''}`} src={slide.src} alt="" onError={() => setFailed(true)} />}
+        {slide.type === "video" ? <video ref={video} className={`hero-video${failed ? ' is-unavailable' : ''}`} src={slide.src} poster="https://drive.google.com/thumbnail?id=19SvPjOMKehcajqeYBRaJoCErGsfjLAxs&sz=w1920" autoPlay={!paused} muted playsInline loop preload="metadata" aria-hidden="true" onError={() => setFailed(true)} /> : <img className={`hero-video${failed ? ' is-unavailable' : ''}`} src={slide.src} alt="" onError={() => setFailed(true)} />}
       </motion.div>
     </div>
     <div className="hero-topline"><span>THE ART OF CELEBRATING</span><span>BAJI MARKET · AFTER DARK</span></div>

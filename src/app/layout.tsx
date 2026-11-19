@@ -17,5 +17,15 @@ export const metadata: Metadata = {
 };
 export const viewport: Viewport = { themeColor: "#153d31", width: "device-width", initialScale: 1 };
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en"><body><SparkleCursor /><CustomCursor /><ConfettiEffect />{children}</body></html>;
+  return <html lang="en">
+    <head>
+      <script dangerouslySetInnerHTML={{ __html: `
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+      ` }} />
+      <script async src="https://www.googletagmanager.com/gtm.js?id=GTM-P9KL25KP" />
+    </head>
+    <body><SparkleCursor /><CustomCursor /><ConfettiEffect />{children}</body>
+  </html>;
 }

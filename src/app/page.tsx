@@ -31,7 +31,7 @@ export default async function Home() {
       <section id="about" className="about-section">
         <div className="container about-grid">
           <div className="story-art" data-reveal>
-            <ScrollPhoto src="/images/shantanukashyap-firework-2869251_1920.jpg" alt="Warm fireworks illuminating a celebration" />
+            <ScrollPhoto src="https://drive.google.com/thumbnail?id=1EpckF7ngBxv10KIhJGeUFq4ZyDZ2ym56&sz=w1920" alt="Warm fireworks illuminating a celebration" />
             <div className="story-art-caption"><span className="eyebrow">THE BEST PART IS WHO YOU SHARE IT WITH</span><p>Stay for<br /><em>one more.</em></p></div>
           </div>
           <div className="story-copy" data-reveal><span className="eyebrow">THE BAJI MARKET STORY</span><RevealHeading>More than light.<br /><em>A feeling.</em></RevealHeading><p className="story-lead">The pause before the burst. The faces lit up. The collective “wow.”</p><p>Some of the best moments begin with something simple. Familiar faces. A shared laugh. A spark that makes everyone stop and look.</p><p>That’s the spirit behind Baji Market. From sparklers to flower pots, our collection is an invitation to come together and make an ordinary night feel extraordinary.</p><RollingLink className="text-link" href="#contact" text="Let’s make a moment of it" /><span className="story-signature">with love, baji market</span></div>

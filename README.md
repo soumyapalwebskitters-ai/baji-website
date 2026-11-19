@@ -69,3 +69,9 @@ npm run build
 ```
 
 Cart tests cover box/piece pricing, rounding, refreshed prices, message contents, invalid quantities, deleted variants and WhatsApp number validation. HTTP checks verify the live catalogue and rendered page. Interactive browser verification was unavailable because the browser tool could not initialize in this environment.
+
+## Order security (Google reCAPTCHA v3)
+
+Register a v3 site at https://www.google.com/recaptcha/admin/create with the production hostname and `localhost` for local testing. Add `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` and `RECAPTCHA_SECRET_KEY` to `.env.local`, using `.env.example` as a reference. Use v3 keys, not v2 or Enterprise-only keys. Set `NEXT_PUBLIC_SITE_URL` to the actual public origin for production hostname verification. Configure the secret on the production server and the public key before building; restart development after changing keys. Never commit the secret.
+
+Clicking Order runs the `place_order` action and posts its token and cart to `/api/checkout`. The server verifies success, action, hostname, token age and a score of at least 0.5 before fetching current prices and generating the WhatsApp link. Missing configuration, failed verification or Google downtime blocks checkout; each retry obtains a new token. Cart changes discard any previously prepared order link. The Google badge remains visible. This protects the website checkout flow; WhatsApp messages are still sent by the customer in WhatsApp.

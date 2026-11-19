@@ -6,9 +6,9 @@ import { useMotionPreference } from "@/hooks/useMotionPreference";
 import RevealHeading from "@/components/RevealHeading";
 
 const photos = [
-  { src: '/images/pexels-new-years-eve-1283521_1920.jpg', title: 'A sky full of colour', description: 'Fireworks lighting up a New Year’s Eve sky.' },
-  { src: '/images/shantanukashyap-firework-2869251_1920.jpg', title: 'The golden hour, after dark', description: 'Golden sparks spreading into the night.' },
-  { src: '/images/sandeepan-fireworks-614268_1920.jpg', title: 'One more moment of wonder', description: 'A brilliant burst of fireworks against the darkness.' },
+  { src: 'https://drive.google.com/thumbnail?id=19SvPjOMKehcajqeYBRaJoCErGsfjLAxs&sz=w1920', title: 'A sky full of colour', description: 'Fireworks lighting up a New Year’s Eve sky.' },
+  { src: 'https://drive.google.com/thumbnail?id=1EpckF7ngBxv10KIhJGeUFq4ZyDZ2ym56&sz=w1920', title: 'The golden hour, after dark', description: 'Golden sparks spreading into the night.' },
+  { src: 'https://drive.google.com/thumbnail?id=1PDRX-w0knYyYerdwVeIBS0lSaKA5GAAU&sz=w1920', title: 'One more moment of wonder', description: 'A brilliant burst of fireworks against the darkness.' },
 ];
 type Arrangement = 'grid' | 'fan' | 'focus';
 export default function GalleryShowcase() {

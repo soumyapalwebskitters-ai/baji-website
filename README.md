@@ -1,6 +1,6 @@
 # Baji Market website
 
-A separate, single-page Next.js website. The existing product-management-system is unchanged.
+A separate, single-page Next.js website.
 
 ## Run locally
 

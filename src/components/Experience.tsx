@@ -30,7 +30,7 @@ export function Motion() {
       const elements = Array.from(document.querySelectorAll<HTMLElement>('[data-reveal], .celebration-strip, .footer-top, .footer-bottom, .collection-tools, .policy-intro'));
       const animations: ReturnType<typeof animate>[] = [];
       elements.forEach(el => { el.style.opacity = '0'; el.style.transform = 'translateY(24px)'; });
-      const details = Array.from(document.querySelectorAll<HTMLElement>('.steps article, .story-copy > p, .enquiry-row > *, .occasion-card > div > *'));
+      const details = Array.from(document.querySelectorAll<HTMLElement>('.steps article, .story-copy > p, .enquiry-row > *'));
       const stop = inView(elements, el => {
         animations.push(animate(el, { opacity: 1, transform: 'translateY(0px)' }, { duration: .75, ease: [.22, 1, .36, 1] }));
         const children = details.filter(child => el.contains(child));
@@ -158,16 +158,16 @@ export function FireworksBanner() {
 
   return <section id="home" className="hero" aria-roledescription="carousel" aria-label="Celebration highlights">
     <div className="hero-art">
-      <img src="/images/fireworks-poster.jpg" alt="" fetchPriority="high" />
+      <img src="/images/shantanukashyap-firework-2869251_1920.jpg" alt="" fetchPriority="high" />
       <motion.div key={slide.src} className="hero-media" initial={{ opacity: reducedMotion ? 1 : 0 }} animate={{ opacity: 1 }} transition={{ duration: reducedMotion ? 0 : .9 }}>
-        {slide.type === "video" ? <video ref={video} className={`hero-video${failed ? ' is-unavailable' : ''}`} src={slide.src} poster="/images/fireworks-poster.jpg" autoPlay={!paused} muted playsInline loop preload="metadata" aria-hidden="true" onError={() => setFailed(true)} /> : <img className={`hero-video${failed ? ' is-unavailable' : ''}`} src={slide.src} alt="" onError={() => setFailed(true)} />}
+        {slide.type === "video" ? <video ref={video} className={`hero-video${failed ? ' is-unavailable' : ''}`} src={slide.src} poster="/images/shantanukashyap-firework-2869251_1920.jpg" autoPlay={!paused} muted playsInline loop preload="metadata" aria-hidden="true" onError={() => setFailed(true)} /> : <img className={`hero-video${failed ? ' is-unavailable' : ''}`} src={slide.src} alt="" onError={() => setFailed(true)} />}
       </motion.div>
     </div>
     <div className="hero-topline"><span>THE ART OF CELEBRATING</span><span>BAJI MARKET · AFTER DARK</span></div>
     <div className="hero-copy">
       <div className="hero-slide-copy">
         <span className="eyebrow">A LITTLE SPARK. A LOT OF CELEBRATION.</span>
-        <h1><span className="hero-title-line"><span>Own the</span></span><span className="hero-title-line"><em>night.</em></span><span className="hero-asterisk" aria-hidden="true">✳</span></h1>
+        <h1><span className="hero-title-line"><span>Own the</span></span><span className="hero-title-line"><em>night.</em></span></h1>
         <div className="hero-description"><p>Some nights deserve more than a memory.<br />Give yours a sky full of colour.</p><RollingLink className="button" href="#collection" text="Explore the collection" /></div>
       </div>
     </div>

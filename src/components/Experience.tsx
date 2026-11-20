@@ -1,5 +1,6 @@
 "use client";
 
+import { useWebContent } from "./WebContentProvider";
 import { useMotionPreference } from "@/hooks/useMotionPreference";
 
 import { useEffect, useRef, useState } from "react";
@@ -92,10 +93,11 @@ export function Navigation() {
 }
 
 export function Contact({ seller }: { seller: Catalog['seller'] | undefined }) {
+  const { copy } = useWebContent();
   const reduce = useMotionPreference();
   const number = whatsappNumber(seller?.whatsapp || '');
   return <div className="contact-card" data-reveal>
-    <span className="eyebrow light">A GOOD EVENING STARTS HERE</span><RevealHeading>Have a celebration<br />in <em>mind?</em></RevealHeading><p>Let’s find a little sparkle for it.</p>
+    <span className="eyebrow light">{copy("Contact.1")}</span><RevealHeading>{copy("Contact.2")}<br />in <em>{copy("Contact.3")}</em></RevealHeading><p>{copy("Contact.4")}</p>
     <div className="enquiry-row">
       {number ? <RollingLink href={`https://wa.me/${number}`} target="_blank" rel="noopener noreferrer" className="button cream" text="Chat on WhatsApp" /> : <RollingLink href="#collection" className="button cream" text="Explore the collection" />}
       {seller?.email && <a href={`mailto:${seller.email}`}>{seller.email}</a>}
@@ -107,23 +109,16 @@ export function Contact({ seller }: { seller: Catalog['seller'] | undefined }) {
 }
 
 
-const BANNER_SLIDES = [
-  { type: "video", src: "/api/banner-video?id=1VIFSHeXNrz0uLuugzlPBy9OIC8kHGOCF" },
-  { type: "video", src: "/api/banner-video?id=12zkM7CRfm6Oq6cDVDMFQo_wiF_zbKR6I" },
-  { type: "video", src: "/api/banner-video?id=1nZQ489DgKAsjVAnaNdfJg3ndVujgBsX-" },
-  { type: "video", src: "/api/banner-video?id=1-0cWzrI4DeMdxKBJPyggBdM004oT85zZ" },
-  { type: "image", src: "https://drive.google.com/thumbnail?id=19SvPjOMKehcajqeYBRaJoCErGsfjLAxs&sz=w1920" },
-  { type: "image", src: "https://drive.google.com/thumbnail?id=1EpckF7ngBxv10KIhJGeUFq4ZyDZ2ym56&sz=w1920" },
-  { type: "image", src: "https://drive.google.com/thumbnail?id=1PDRX-w0knYyYerdwVeIBS0lSaKA5GAAU&sz=w1920" },
-];
-
 export function FireworksBanner() {
+  const { content, copy } = useWebContent();
   const video = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(true);
   const [reducedMotion, setReducedMotion] = useState(true);
   const [failed, setFailed] = useState(false);
   const [index, setIndex] = useState(0);
-  const slide = BANNER_SLIDES[index];
+  const slides = content.slides;
+  const slide = slides[index];
+  const poster = content.images["banner.poster"];
 
   useEffect(() => {
     const preference = matchMedia('(prefers-reduced-motion: reduce)');
@@ -140,46 +135,46 @@ export function FireworksBanner() {
     el.defaultMuted = true;
     if (paused) el.pause();
     else void el.play().catch(() => { /* Keep slide navigation available if autoplay is blocked. */ });
-  }, [index, paused, reducedMotion]);
+  }, [index, paused, reducedMotion, slides.length]);
 
   useEffect(() => {
-    if (paused || reducedMotion) return;
+    if (paused || reducedMotion || slides.length < 2) return;
     const timer = window.setTimeout(() => {
       setFailed(false);
-      setIndex((current) => (current + 1) % BANNER_SLIDES.length);
+      setIndex((current) => (current + 1) % slides.length);
     }, 8000);
     return () => window.clearTimeout(timer);
-  }, [index, paused, reducedMotion]);
+  }, [index, paused, reducedMotion, slides.length]);
 
   function selectSlide(next: number) {
-    if (next === index) return;
+    if (next === index || !slides.length) return;
     setFailed(false);
-    setIndex((next + BANNER_SLIDES.length) % BANNER_SLIDES.length);
+    setIndex((next + slides.length) % slides.length);
   }
 
   return <section id="home" className="hero" aria-roledescription="carousel" aria-label="Celebration highlights">
     <div className="hero-art">
-      <img src="https://drive.google.com/thumbnail?id=19SvPjOMKehcajqeYBRaJoCErGsfjLAxs&sz=w1920" alt="" fetchPriority="high" />
-      <motion.div key={slide.src} className="hero-media" initial={{ opacity: reducedMotion ? 1 : 0 }} animate={{ opacity: 1 }} transition={{ duration: reducedMotion ? 0 : .9 }}>
-        {slide.type === "video" ? <video ref={video} className={`hero-video${failed ? ' is-unavailable' : ''}`} src={slide.src} poster="https://drive.google.com/thumbnail?id=19SvPjOMKehcajqeYBRaJoCErGsfjLAxs&sz=w1920" autoPlay={!paused} muted playsInline loop preload="metadata" aria-hidden="true" onError={() => setFailed(true)} /> : <img className={`hero-video${failed ? ' is-unavailable' : ''}`} src={slide.src} alt="" onError={() => setFailed(true)} />}
-      </motion.div>
+      {poster && <img src={poster} alt="" fetchPriority="high" />}
+      {slide && <motion.div key={slide.id} className="hero-media" initial={{ opacity: reducedMotion ? 1 : 0 }} animate={{ opacity: 1 }} transition={{ duration: reducedMotion ? 0 : .9 }}>
+        {slide.type === "video" ? <video ref={video} className={`hero-video${failed ? ' is-unavailable' : ''}`} src={slide.src} poster={poster || undefined} autoPlay={!paused} muted playsInline loop preload="metadata" aria-hidden="true" onError={() => setFailed(true)} /> : <img className={`hero-video${failed ? ' is-unavailable' : ''}`} src={slide.src} alt={slide.alt} onError={() => setFailed(true)} />}
+      </motion.div>}
     </div>
-    <div className="hero-topline"><span>THE ART OF CELEBRATING</span><span>BAJI MARKET · AFTER DARK</span></div>
+    <div className="hero-topline"><span>{copy("FireworksBanner.1")}</span><span>{copy("FireworksBanner.2")}</span></div>
     <div className="hero-copy">
       <div className="hero-slide-copy">
-        <span className="eyebrow">A LITTLE SPARK. A LOT OF CELEBRATION.</span>
-        <h1><span className="hero-title-line"><span>Own the</span></span><span className="hero-title-line"><em>night.</em></span></h1>
-        <div className="hero-description"><p>Some nights deserve more than a memory.<br />Give yours a sky full of colour.</p><RollingLink className="button" href="#collection" text="Explore the collection" /></div>
+        <span className="eyebrow">{copy("FireworksBanner.3")}</span>
+        <h1><span className="hero-title-line"><span>{copy("FireworksBanner.4")}</span></span><span className="hero-title-line"><em>{copy("FireworksBanner.5")}</em></span></h1>
+        <div className="hero-description"><p>{copy("FireworksBanner.6")}<br />{copy("FireworksBanner.7")}</p><RollingLink className="button" href={copy("banner.buttonLink")} text={copy("banner.button")} /></div>
       </div>
     </div>
     <div className="hero-floating-target"><FloatingTarget /></div>
-    <button className="video-control" type="button" aria-label={paused ? 'Play banner slideshow' : 'Pause banner slideshow'} onClick={() => setPaused((current) => !current)}>{paused ? '▷ PLAY THE SKY' : 'Ⅱ PAUSE THE SKY'}</button>
-    <div className="hero-note"><span className="hero-note-spark" aria-hidden="true">✳</span><p>For the nights<br />you’ll talk about tomorrow.</p></div>
-    <motion.button className="launch-skyshot" type="button" whileHover={reducedMotion ? undefined : { scale: 1.04 }} whileTap={reducedMotion ? undefined : { scale: .95 }}>Launch a skyshot <span aria-hidden="true">↑</span></motion.button>
+    {slide && <button className="video-control" type="button" aria-label={paused ? 'Play banner slideshow' : 'Pause banner slideshow'} onClick={() => setPaused((current) => !current)}>{paused ? '▷ PLAY THE SKY' : 'Ⅱ PAUSE THE SKY'}</button>}
+    <div className="hero-note"><span className="hero-note-spark" aria-hidden="true">✳</span><p>{copy("FireworksBanner.8")}<br />{copy("FireworksBanner.9")}</p></div>
+    <motion.button className="launch-skyshot" type="button" whileHover={reducedMotion ? undefined : { scale: 1.04 }} whileTap={reducedMotion ? undefined : { scale: .95 }}>{copy("FireworksBanner.10")}<span aria-hidden="true">↑</span></motion.button>
     <div className="hero-slider-controls" role="group" aria-label="Banner slides">
-      {BANNER_SLIDES.map((item, i) => <button key={item.src} type="button" className={`hero-slide-dot${i === index ? ' is-active' : ''}`} aria-label={`Show ${item.type} slide ${i + 1}`} aria-current={i === index ? 'true' : undefined} onClick={() => selectSlide(i)}><motion.span aria-hidden="true" animate={{ width: i === index ? 30 : 8, opacity: i === index ? 1 : .35 }} transition={{ duration: reducedMotion ? 0 : .25 }} /></button>)}
+      {slides.map((item, i) => <button key={item.id} type="button" className={`hero-slide-dot${i === index ? ' is-active' : ''}`} aria-label={`Show ${item.type} slide ${i + 1}`} aria-current={i === index ? 'true' : undefined} onClick={() => selectSlide(i)}><motion.span aria-hidden="true" animate={{ width: i === index ? 30 : 8, opacity: i === index ? 1 : .35 }} transition={{ duration: reducedMotion ? 0 : .25 }} /></button>)}
     </div>
-    <div className="hero-bottom"><span><i /> THE SKY IS YOUR CANVAS</span><a href="#collection">SCROLL TO DISCOVER</a><span>LIGHT / COLOUR / WONDER</span></div>
+    <div className="hero-bottom"><span><i /> {copy("FireworksBanner.11")}</span><a href="#collection">{copy("FireworksBanner.12")}</a><span>{copy("FireworksBanner.13")}</span></div>
   </section>;
 }
 

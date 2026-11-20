@@ -1,3 +1,5 @@
+import { parseCustomerProfile, saveCustomerProfile, loadCustomerProfile } from '@/lib/customer-profiles';
+import { validRecaptcha } from '@/lib/recaptcha';
 import { cookies } from 'next/headers';
 
 const accessCookie = 'baji_customer_access';
@@ -42,7 +44,7 @@ export async function POST(request: Request) {
       let token = store.get(accessCookie)?.value;
       if (token) {
         const response = await auth('user', undefined, token);
-        if (response.ok) { const user = await response.json(); return json({ user: { phone: user.phone } }); }
+        if (response.ok) { const user = await response.json(); if (!user.id || !user.phone || !user.phone_confirmed_at || user.is_anonymous) { clear(); return json({ user: null }); } const profile = await loadCustomerProfile(user.id); return json({ user: { ...profile, phone: user.phone } }); }
         if (response.status !== 401 && response.status !== 403) return json({ error: 'Unable to check your account. Try again.' }, 503);
       }
       const refresh = store.get(refreshCookie)?.value;
@@ -52,16 +54,35 @@ export async function POST(request: Request) {
         if (response.status >= 500 || response.status === 429) return json({ error: 'Unable to check your account. Try again.' }, 503);
         clear(); return json({ user: null });
       }
-      const session = await response.json(); save(session);
-      return json({ user: { phone: session.user.phone } });
+      const session = await response.json();
+      if (!session.access_token || !session.refresh_token || !session.user?.id || !session.user.phone || !session.user.phone_confirmed_at || session.user.is_anonymous) { clear(); return json({ user: null }); }
+      const profile = await loadCustomerProfile(session.user.id);
+      save(session);
+      return json({ user: { ...profile, phone: session.user.phone } });
     }
-    if (typeof body.phone !== 'string' || !/^\+[1-9]\d{7,14}$/.test(body.phone)) return json({ error: 'Enter your phone number with country code, for example +91.' }, 400);
+    let profile;
+    try { profile = parseCustomerProfile(body); } catch (error) { return json({ error: error instanceof Error ? error.message : 'Invalid profile.' }, 400); }
     if (body.action === 'verify' && (typeof body.code !== 'string' || !/^\d{6}$/.test(body.code))) return json({ error: 'Enter the six-digit verification code.' }, 400);
+    if (typeof body.recaptchaToken !== 'string' || !body.recaptchaToken || body.recaptchaToken.length > 10000) return json({ error: 'Please retry the login security check.' }, 400);
+    const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY;
+    if (!recaptchaSecret) return json({ error: 'Login security check is unavailable. Please try again later.' }, 503);
+    try {
+      const verification = await fetch('https://www.google.com/recaptcha/api/siteverify', {
+        method: 'POST', body: new URLSearchParams({ secret: recaptchaSecret, response: body.recaptchaToken }),
+        cache: 'no-store', signal: AbortSignal.timeout(10000),
+      });
+      if (!verification.ok) return json({ error: 'Login security check is unavailable. Please try again.' }, 503);
+      const expectedHostname = process.env.NODE_ENV === 'development' ? destination.hostname : new URL(configuredOrigin || destination).hostname;
+      if (!validRecaptcha(await verification.json(), expectedHostname, Date.now(), `customer_login_${body.action}`)) return json({ error: 'Login security check failed. Please try again.' }, 403);
+    } catch { return json({ error: 'Login security check is unavailable. Please try again.' }, 503); }
     const response = await auth(body.action === 'send' ? 'otp' : 'verify', body.action === 'send' ? { phone: body.phone, create_user: true, channel: 'sms' } : { phone: body.phone, token: body.code, type: 'sms' });
     if (!response.ok) return json({ error: response.status === 429 ? 'Too many attempts. Please wait before trying again.' : body.action === 'send' ? 'We could not send a code. Please try again later.' : 'The code is invalid or expired. Please try again.' }, response.status === 429 ? 429 : 400);
     if (body.action === 'send') return json({ sent: true });
     const session = await response.json();
-    if (!session.access_token || !session.refresh_token || !session.user?.phone) return json({ error: 'Unable to verify your account.' }, 502);
-    save(session); return json({ user: { phone: session.user.phone } });
+    if (!session.access_token || !session.refresh_token || !session.user?.id || !session.user.phone || !session.user.phone_confirmed_at || session.user.is_anonymous) return json({ error: 'Unable to verify your account.' }, 502);
+    if (`+${session.user.phone.replace(/^\+/, '')}` !== profile.phone) return json({ error: 'Verified phone number does not match.' }, 400);
+    let savedProfile;
+    try { savedProfile = await saveCustomerProfile(session.user.id, profile); } catch { return json({ error: 'We could not save your profile. Please request a new code and try again.' }, 503); }
+    save(session); return json({ user: savedProfile });
   } catch { return json({ error: 'Phone login is temporarily unavailable. Please try again.' }, 503); }
 }

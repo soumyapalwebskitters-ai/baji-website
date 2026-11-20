@@ -17,8 +17,3 @@ export function resolveCart(catalog: Catalog, cart: CartLine[]) {
     return { ...line, product, variant, price, total: Math.round(price * line.quantity * 100) / 100 };
   });
 }
-export function whatsappMessage(catalog: Catalog, cart: CartLine[]) {
-  const lines = resolveCart(catalog, cart);
-  const total = lines.reduce((sum, line) => sum + Math.round(line.total * 100), 0) / 100;
-  return ['Hello Baji Market! I would like to order:', '', ...lines.map((line, index) => `${index + 1}. ${line.product.name} — ${line.variant.name}${line.variant.sku ? ` [${line.variant.sku}]` : ''}\n   ${line.quantity} ${line.variant.sellingUnit === 'box' ? `box(es), ${line.variant.itemsPerBox} pieces per box` : 'piece(s)'} × ${money(line.price)} = ${money(line.total)}`), '', `Estimated total: ${money(total)}`, '', 'Please confirm availability, final pricing and collection/delivery arrangements.'].join('\n');
-}

@@ -5,9 +5,11 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useMotionPreference } from '@/hooks/useMotionPreference';
 import styles from './CustomerLogin.module.css';
+import Script from 'next/script';
+import { executeRecaptcha, recaptchaSiteKey } from '@/lib/recaptcha-client';
 import { RollingText } from './RollingText';
 
-type User = { phone: string };
+type User = { phone: string; name?: string; email?: string; location?: string };
 async function request(action: string, data = {}) {
   const response = await fetch('/api/customer-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...data }), signal: AbortSignal.timeout(20000) });
   const result = await response.json();
@@ -23,6 +25,9 @@ export default function CustomerLogin() {
   const [open, setOpen] = useState(false);
   const [reviewIntent, setReviewIntent] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [location, setLocation] = useState('');
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [sent, setSent] = useState(false);
@@ -62,7 +67,8 @@ export default function CustomerLogin() {
     if (pending.current || (action === 'send' && cooldown > 0)) return;
     pending.current = true; setBusy(true); setError('');
     try {
-      const result = await request(action, { phone: `+91${phone}`, code });
+      const recaptchaToken = action === 'logout' ? undefined : await executeRecaptcha(action === 'send' ? 'customer_login_send' : 'customer_login_verify');
+      const result = await request(action, { name, phone: `+91${phone}`, email, location, code, recaptchaToken });
       if (action === 'send') { setSent(true); setCooldown(60); setCode(''); }
       else { setUser(result.user); setSent(false); setCode(''); if (action === 'verify' && reviewIntent) { dialog.current?.close(); setOpen(false); } }
     } catch (e) { setError(e instanceof Error ? e.message : 'Please try again.'); }
@@ -70,21 +76,23 @@ export default function CustomerLogin() {
   }
   function submit(event: FormEvent) { event.preventDefault(); void act(sent ? 'verify' : 'send'); }
   return <>
+    {open && recaptchaSiteKey && <Script src={`https://www.google.com/recaptcha/api.js?render=${encodeURIComponent(recaptchaSiteKey)}`} strategy="afterInteractive" onError={() => setError('Security check could not load. Please reload and try again.')} />}
     <motion.button ref={trigger} type="button" className={styles.loginButton} whileHover={reduce ? undefined : { y: -2 }} whileTap={reduce ? undefined : { scale: .95 }} onClick={() => { setReviewIntent(false); setOpen(true); }} aria-haspopup="dialog">{user ? 'Account' : 'Login'} <span aria-hidden="true">↗</span></motion.button>
     {mounted && createPortal(<AnimatePresence>{open && <dialog ref={dialog} className={styles.dialog} aria-labelledby="customer-login-title" onCancel={event => { event.preventDefault(); close(); }} onClick={event => { if (event.target === event.currentTarget) close(); }} data-lenis-prevent>
       <motion.div className={styles.panel} initial={reduce ? false : { opacity: 0, y: 24, scale: .96 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 300, damping: 28 }}>
         <button type="button" className={styles.close} onClick={close} disabled={busy} aria-label="Close login">×</button>
         <span className={styles.spark} aria-hidden="true">✳</span><span className="eyebrow">YOUR BAJI ACCOUNT</span>
         <h2 id="customer-login-title">{user ? 'You’re in.' : sent ? 'One little code.' : 'Welcome'} {!user && !sent && <em>back.</em>}</h2>
-        {user ? <><p>Signed in with +{user.phone.replace(/^\+/, '')}.</p><button className="button" type="button" disabled={busy} onClick={() => void act('logout')}>{busy ? 'Signing out…' : 'Sign out'}</button></> : <form onSubmit={submit}>
+        {user ? <>{user.name && <p>Welcome, {user.name}.</p>}{user.email && <p>{user.email}</p>}{user.location && <p>{user.location}</p>}<p>Signed in with +{user.phone.replace(/^\+/, '')}.</p><button className="button" type="button" disabled={busy} onClick={() => void act('logout')}>{busy ? 'Signing out…' : 'Sign out'}</button></> : <form onSubmit={submit}>
           <p>{sent ? `Enter the code sent to +91${phone}.` : reviewIntent ? 'Sign in with your phone number to write a review. We’ll open your review form after verification.' : 'Sign in or create an account with your phone number. No password to remember.'}</p>
-          {sent ? <label className={styles.field}>Verification code<input key="code" autoFocus inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ''))} placeholder="000000" disabled={busy} /></label> : <label className={styles.field}>Phone number<span className={styles.phoneInput}><span className={styles.phonePrefix} aria-hidden="true">+91</span><input key="phone" autoFocus type="tel" inputMode="numeric" autoComplete="tel-national" aria-label="Phone number, country code +91" pattern="[0-9]{10}" required value={phone} onChange={event => {
+          {sent ? <label className={styles.field}>Verification code<input key="code" autoFocus inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required value={code} onChange={event => setCode(event.target.value.replace(/\D/g, ''))} placeholder="000000" disabled={busy} /></label> : <div className={styles.profileFields}><label className={styles.field}>Your name (required)<input autoFocus autoComplete="name" required minLength={2} maxLength={80} value={name} onChange={event => setName(event.target.value)} placeholder="Your full name" disabled={busy} /></label><label className={styles.field}>Phone number (required)<span className={styles.phoneInput}><span className={styles.phonePrefix} aria-hidden="true">+91</span><input key="phone" type="tel" inputMode="numeric" autoComplete="tel-national" aria-label="Phone number, country code +91" pattern="[0-9]{10}" required value={phone} onChange={event => {
             const digits = event.target.value.replace(/\D/g, '');
             setPhone((digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits).slice(0, 10));
-          }} placeholder="98765 43210" disabled={busy} /></span><small>Enter your 10-digit phone number.</small></label>}
+          }} placeholder="98765 43210" disabled={busy} /></span><small>Enter your 10-digit phone number.</small></label><label className={styles.field}>Email (optional)<input type="email" autoComplete="email" maxLength={254} value={email} onChange={event => setEmail(event.target.value)} placeholder="you@example.com" disabled={busy} /></label><label className={styles.field}>Location (optional)<input autoComplete="address-level2" maxLength={200} value={location} onChange={event => setLocation(event.target.value)} placeholder="City or area" disabled={busy} /></label></div>}
           <motion.button type="submit" className={`button ${styles.verificationButton}`} disabled={busy || (!sent && cooldown > 0)} initial="rest" animate="rest" whileHover="hover" whileFocus="hover" whileTap={reduce ? undefined : { scale: .98 }}><RollingText text={busy ? 'Please wait…' : sent ? 'Verify & sign in' : cooldown ? `Try again in ${cooldown}s` : 'Send verification code'} /></motion.button>
-          {sent && <div className={styles.secondary}><button type="button" disabled={busy} onClick={() => { setSent(false); setCode(''); setError(''); }}>Change number</button><button type="button" disabled={busy || cooldown > 0} onClick={() => void act('send')}>{cooldown ? `Resend in ${cooldown}s` : 'Resend code'}</button></div>}
-          <small className={styles.note}>You can also browse and order as a guest.</small>
+          {sent && <div className={styles.secondary}><button type="button" disabled={busy} onClick={() => { setSent(false); setCode(''); setError(''); }}>Edit details</button><button type="button" disabled={busy || cooldown > 0} onClick={() => void act('send')}>{cooldown ? `Resend in ${cooldown}s` : 'Resend code'}</button></div>}
+          <small className={styles.note}>Protected by reCAPTCHA. Google’s <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a> and <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> apply.</small>
+          <small className={styles.note}>Your details are saved to your account after phone verification. You can also browse and submit queries as a guest.</small>
         </form>}
         {error && <p className={styles.error} role="alert">{error}</p>}
       </motion.div>

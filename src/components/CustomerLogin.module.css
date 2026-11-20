@@ -13,3 +13,5 @@
 .phoneInput:focus-within{border-color:var(--accent)}
 .phonePrefix{flex-shrink:0;padding:0 14px;border-right:1px solid var(--line);color:var(--ink)}
 .phoneInput input{min-width:0;border:0;border-radius:0;background:transparent}
+
+.profileFields{display:grid;gap:18px}

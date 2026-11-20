@@ -1,0 +1,307 @@
+--- /dev/null
++++ b/WEB_QUERIES.md
+@@ -0,0 +1,7 @@
++# Website product queries
++
++Seller → Booking → Query (`#/seller/query`) lists enquiries from the website's `product query` table, including contact details and product snapshots. Search and status filters apply across all records, with 50 records per page. This is a seller-only, read-only view. Anonymous visitors and buyer accounts cannot access `/api/product-queries`.
++
++Production uses the existing `baji-market-reviews` D1 database, bound as `REVIEWS_DB` on both apps. Before deploying, apply only `website-migrations/0003_product_query.sql` to that database. Do not bulk-apply historical market migrations. The local adapter reads `../baji-market-website/.data/reviews.sqlite`. Inventory data is unchanged.
++
++Check: `node --experimental-sqlite --import tsx --test src/productQueries.test.ts src/security.test.ts`, followed by `npm run build`.
+--- a/wrangler.jsonc
++++ b/wrangler.jsonc
+@@ -13,7 +13,9 @@
+   "assets": {
+     "directory": "./dist",
+     "not_found_handling": "single-page-application",
+-    "run_worker_first": ["/api/*"]
++    "run_worker_first": [
++      "/api/*"
++    ]
+   },
+   "d1_databases": [
+     {
+@@ -21,6 +23,12 @@
+       "database_name": "market",
+       "database_id": "f5dacd2e-39db-4689-b5ec-f1d523b0bb61",
+       "migrations_dir": "migrations"
++    },
++    {
++      "binding": "REVIEWS_DB",
++      "database_name": "baji-market-reviews",
++      "database_id": "89aba547-ec24-4260-a721-01b53dc78c34"
+     }
+-  ]
++  ],
++  "keep_vars": true
+ }
+--- a/server/local.ts
++++ b/server/local.ts
+@@ -23,6 +23,17 @@
+ }
+ 
+ let database: Sql | null = null
++let queryDatabase: Sql | null = null
++function localQueryDatabase() {
++  if (!queryDatabase) {
++    const directory = join(process.cwd(), '../baji-market-website/.data')
++    mkdirSync(directory, { recursive: true })
++    const db = new DatabaseSync(join(directory, 'reviews.sqlite'))
++    db.exec(readFileSync(join(process.cwd(), 'website-migrations/0003_product_query.sql'), 'utf8'))
++    queryDatabase = toSql(db)
++  }
++  return queryDatabase
++}
+ 
+ function toSql(db: DatabaseSync): Sql {
+   return {
+@@ -110,7 +121,7 @@
+     try { body = await readBody(req) } catch { res.statusCode = 413; res.end('Request is too large.'); return }
+   }
+   const request = new Request(`http://${headers.get('host') ?? 'localhost'}${req.url ?? '/'}`, { method, headers, body })
+-  const response = await handleApi(request, localDatabase(), { setupToken: process.env.SELLER_SETUP_TOKEN, clientIp: req.socket?.remoteAddress ?? 'local' })
++  const response = await handleApi(request, localDatabase(), { setupToken: process.env.SELLER_SETUP_TOKEN, queriesDb: req.url?.split('?')[0] === '/api/product-queries' ? localQueryDatabase() : undefined, clientIp: req.socket?.remoteAddress ?? 'local' })
+   res.statusCode = response.status
+   response.headers.forEach((value, name) => res.setHeader(name, name === 'set-cookie' ? value.replace('; Secure', '') : value))
+   res.end(new Uint8Array(await response.arrayBuffer()))
+--- /dev/null
++++ b/website-migrations/0003_product_query.sql
+@@ -0,0 +1,13 @@
++CREATE TABLE IF NOT EXISTS "product query" (
++  id TEXT PRIMARY KEY,
++  request_hash TEXT NOT NULL,
++  name TEXT NOT NULL,
++  phone TEXT NOT NULL,
++  email TEXT NOT NULL DEFAULT '',
++  location TEXT NOT NULL DEFAULT '',
++  items_json TEXT NOT NULL,
++  estimated_total_minor INTEGER NOT NULL CHECK (estimated_total_minor >= 0),
++  status TEXT NOT NULL DEFAULT 'new' CHECK(status IN ('new','contacted','closed')),
++  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
++);
++CREATE INDEX IF NOT EXISTS product_query_created_at ON "product query"(created_at DESC);
+--- /dev/null
++++ b/worker/productQueries.ts
+@@ -0,0 +1,26 @@
++import type { Sql, SqlValue } from '../src/sql'
++import { RequestError } from './security'
++export async function readProductQueries(request: Request, db: Sql) {
++  const params = new URL(request.url).searchParams
++  const page = Number(params.get('page') || 1)
++  const search = (params.get('q') || '').trim()
++  const status = params.get('status') || ''
++  if (!Number.isSafeInteger(page) || page < 1 || page > 1000000 || search.length > 200 || !['', 'new', 'contacted', 'closed'].includes(status)) throw new RequestError(400, 'Invalid query filters.')
++  const clauses: string[] = [], values: SqlValue[] = []
++  if (search) {
++    clauses.push("(name LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\' OR email LIKE ? ESCAPE '\\' OR location LIKE ? ESCAPE '\\' OR id LIKE ? ESCAPE '\\' OR items_json LIKE ? ESCAPE '\\')")
++    const term = `%${search.replace(/[\\%_]/g, '\\$&')}%`
++    values.push(term, term, term, term, term, term)
++  }
++  if (status) { clauses.push('status = ?'); values.push(status) }
++  const where = clauses.length ? ` WHERE ${clauses.join(' AND ')}` : ''
++  const total = (await db.first<{total: number}>(`SELECT COUNT(*) AS total FROM "product query"${where}`, values))?.total ?? 0
++  const pageSize = 50
++  const actualPage = Math.min(page, Math.max(1, Math.ceil(total / pageSize)))
++  type Row = { id: string; name: string; phone: string; email: string; location: string; items_json: string; estimated_total_minor: number; status: string; created_at: string }
++  const rows = await db.all<Row>(`SELECT id,name,phone,email,location,items_json,estimated_total_minor,status,created_at FROM "product query"${where} ORDER BY created_at DESC,id DESC LIMIT ? OFFSET ?`, [...values, pageSize, (actualPage - 1) * pageSize])
++  return { total, page: actualPage, pageSize, queries: rows.map(({items_json, ...row}) => {
++    try { const items: unknown = JSON.parse(items_json); if (!Array.isArray(items) || !items.every(item => item && typeof item === 'object' && typeof item.productName === 'string' && typeof item.variantName === 'string' && Number.isSafeInteger(item.quantity) && Number.isSafeInteger(item.unitPriceMinor) && Number.isSafeInteger(item.totalMinor))) throw new Error('Invalid items'); return {...row, items, itemsError: false} }
++    catch { return {...row, items: [], itemsError: true} }
++  }) }
++}
+--- a/worker/api.ts
++++ b/worker/api.ts
+@@ -1,3 +1,4 @@
++import { readProductQueries } from './productQueries'
+ import { handleGallery, handleState } from '../src/shopApi'
+ import { readShop } from '../src/persist'
+ import type { Sql } from '../src/sql'
+@@ -29,7 +30,7 @@
+     seller: state.seller,
+   }
+ }
+-export type ApiOptions = { setupToken?: string; clientIp?: string }
++export type ApiOptions = { setupToken?: string; clientIp?: string; queriesDb?: Sql }
+ export async function handleApi(request: Request, db: Sql, options: ApiOptions = {}): Promise<Response> {
+   try {
+     const path = new URL(request.url).pathname
+@@ -60,9 +61,13 @@
+       const state: State = saved?.state ?? { products: [], purchases: [], movements: [], buyers: [], orders: [], offers: [], gallery: [] }
+       return json({ revision: saved?.revision ?? 0, fresh: false, staff: false, state: publicState(state) })
+     }
+-    if (!['/api/state', '/api/gallery', '/api/auth/buyers', '/api/auth/seller/password'].includes(path)) return json({ error: 'Not found.' }, 404)
++    if (!['/api/state', '/api/gallery', '/api/auth/buyers', '/api/auth/seller/password', '/api/product-queries'].includes(path)) return json({ error: 'Not found.' }, 404)
+     if (!account) return json({ error: 'Seller sign-in is required.' }, 401)
+     if (account.role !== 'seller') return json({ error: 'Seller access is required.' }, 403)
++    if (path === '/api/product-queries' && request.method === 'GET') {
++      if (!options.queriesDb) return json({ error: 'Product query database is not configured.' }, 503)
++      return json(await readProductQueries(request, options.queriesDb))
++    }
+     if (path === '/api/auth/seller/password' && request.method === 'PUT') return authResponse(await resetSellerPassword(db, account, await readJson(request, 4096)))
+     if (path === '/api/auth/buyers' && request.method === 'POST') return authResponse(await createBuyerAccount(db, account, await readJson(request, 4096)))
+     if (path === '/api/gallery' && ['POST', 'DELETE'].includes(request.method)) {
+--- a/worker/index.ts
++++ b/worker/index.ts
+@@ -1,6 +1,6 @@
+ import { handleApi } from './api'
+ import type { Sql, SqlStatement, SqlValue } from '../src/sql'
+-type Env = { DB: D1Database; SELLER_SETUP_TOKEN?: string }
++type Env = { DB: D1Database; REVIEWS_DB?: D1Database; SELLER_SETUP_TOKEN?: string }
+ function d1(db: D1Database): Sql {
+   return {
+     async first<T>(sql: string, params: SqlValue[] = []) {
+@@ -19,6 +19,6 @@
+ 
+ export default {
+   async fetch(request, env): Promise<Response> {
+-    return handleApi(request, d1(env.DB), { setupToken: env.SELLER_SETUP_TOKEN, clientIp: request.headers.get('cf-connecting-ip') ?? 'unknown' })
++    return handleApi(request, d1(env.DB), { setupToken: env.SELLER_SETUP_TOKEN, queriesDb: env.REVIEWS_DB ? d1(env.REVIEWS_DB) : undefined, clientIp: request.headers.get('cf-connecting-ip') ?? 'unknown' })
+   },
+ } satisfies ExportedHandler<Env>
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -15,10 +15,11 @@
+ import { StockView } from './views/StockView'
+ import { SellerBuyersView } from './views/SellerBuyersView'
+ import { Icon } from './components/Icon'
++import { QueriesView } from './views/QueriesView'
+ import { GalleryView } from './views/GalleryView'
+ 
+ type Role = 'seller' | 'buyer'
+-type SellerView = 'products' | 'glance' | 'gallery' | 'stock' | 'buy' | 'delivery' | 'accounts' | 'recent' | 'offers' | 'suppliers' | 'profile' | 'buyers' | 'settings'
++type SellerView = 'products' | 'glance' | 'gallery' | 'stock' | 'buy' | 'delivery' | 'accounts' | 'recent' | 'offers' | 'suppliers' | 'profile' | 'buyers' | 'settings' | 'query'
+ 
+ type Route =
+   | { role: 'seller'; view: SellerView }
+@@ -35,6 +36,7 @@
+   { id: 'offers', label: 'Offers', icon: 'tag' }, { id: 'suppliers', label: 'Supplier orders', icon: 'factory' },
+   { id: 'profile', label: 'Seller info', icon: 'user' }, { id: 'settings', label: 'Settings', icon: 'settings' },
+   { id: 'buyers', label: 'Buyer info', icon: 'buyer' },
++  { id: 'query', label: 'Query', icon: 'receipt' },
+   { id: 'accounts', label: 'Accounts', icon: 'receipt' },
+ ]
+ 
+@@ -42,6 +44,7 @@
+   { label: 'Catalog', links: ['products', 'glance', 'gallery', 'recent'] },
+   { label: 'Stock', links: ['stock', 'buy', 'suppliers'] },
+   { label: 'Orders', links: ['delivery', 'offers'] },
++  { label: 'Booking', links: ['query'] },
+   { label: 'Business', links: ['profile', 'buyers'] },
+ ] as const
+ 
+@@ -54,6 +57,7 @@
+   }
+   const view = parts[0] === 'seller' ? parts[1] : parts[0]
+   if (!parts.length) return { role: 'buyer', view: 'buyers', buyerId: null }
++  if (view === 'query') return { role: 'seller', view: 'query' }
+   if (view === 'glance') return { role: 'seller', view: 'glance' }
+   if (view === 'gallery') return { role: 'seller', view: 'gallery' }
+   if (view === 'stock') return { role: 'seller', view: 'stock' }
+@@ -199,6 +203,7 @@
+           </div>
+         )}
+         {locked ? <section className="seller-lock"><h2><Icon name="lock" /> Seller access</h2><><p>Enter the seller password to continue.</p>{passwordError && <p className="error">{passwordError}</p>}<form onSubmit={async (event) => { event.preventDefault(); if (!password || sellerLoginPending) { if (!password) setPasswordError('Enter the seller password.'); return } setSellerLoginPending(true); try { const response = await fetch('/api/auth/seller/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password }) }); const body = await response.json().catch(() => null); if (!response.ok) { setPasswordError(typeof body?.error === 'string' ? body.error : 'Could not unlock Seller.'); return } setPassword(''); setPasswordError(''); window.location.reload() } catch { setPasswordError('Could not reach Seller access.') } finally { setSellerLoginPending(false) } }}><label className="field">Seller password<input type="password" autoFocus autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} /></label><button className="btn" type="submit" disabled={sellerLoginPending}>{sellerLoginPending ? <><span className="spinner" aria-hidden="true" /> Checking…</> : <><Icon name="unlock" /> Unlock seller</>}</button></form></></section> : null}
++        {!locked && route.role === 'seller' && route.view === 'query' && <QueriesView />}
+         {!locked && route.role === 'seller' && route.view === 'products' && <ProductsView />}
+         {!locked && route.role === 'seller' && route.view === 'glance' && <GlanceView />}
+         {!locked && route.role === 'seller' && route.view === 'gallery' && <GalleryView />}
+--- /dev/null
++++ b/src/productQueries.test.ts
+@@ -0,0 +1,50 @@
++import test from 'node:test'
++import assert from 'node:assert/strict'
++import { readFileSync } from 'node:fs'
++import { memoryDatabase } from '../server/local'
++import { handleApi } from '../worker/api'
++import { handleState } from './shopApi'
++import { ensureState } from './parseState'
++import { seedState } from './seed'
++const request=(path:string,cookie?:string)=>new Request(`https://shop.example${path}`,{headers:cookie?{cookie}:{}})
++async function fixture() {
++ const db=memoryDatabase(),queriesDb=memoryDatabase()
++ const schema=readFileSync('website-migrations/0003_product_query.sql','utf8')
++ for(const sql of schema.split(';').map(x=>x.trim()).filter(Boolean))await queriesDb.batch([{sql,params:[]}])
++ const auth=await handleApi(new Request('https://shop.example/api/auth/setup',{method:'POST',headers:{'content-type':'application/json','x-setup-token':'test-token'},body:JSON.stringify({email:'seller@example.com',password:'test-password-123'})}),db,{setupToken:'test-token'})
++ assert.equal(auth.status,200)
++ const cookie=auth.headers.get('set-cookie')!.split(';')[0]
++ const items=JSON.stringify([{productId:'p1',productName:'Sparklers',variantId:'v1',variantName:'Small',sku:'SP1',quantity:2,sellingUnit:'box',itemsPerBox:10,unitPriceMinor:2500,totalMinor:5000}])
++ await queriesDb.batch(Array.from({length:125},(_,i)=>({sql:'INSERT INTO "product query" (id,request_hash,name,phone,email,location,items_json,estimated_total_minor,status) VALUES (?,?,?,?,?,?,?,?,?)',params:[`query-${String(i).padStart(3,'0')}`,'private-hash',`Customer ${i}`,'+919876543210','customer@example.com',i===0?'Special city':'City',items,5000,i===0?'contacted':'new']})))
++ return {db,queriesDb,cookie}
++}
++test('seller can view all query pages and saved product/contact snapshots',async()=>{
++ const {db,queriesDb,cookie}=await fixture();const ids=new Set()
++ for(let page=1;page<=3;page++){
++  const response=await handleApi(request(`/api/product-queries?page=${page}`,cookie),db,{queriesDb});assert.equal(response.status,200)
++  const data=await response.json();assert.equal(data.total,125);assert.equal(data.page,page)
++  for(const row of data.queries){ids.add(row.id);assert.equal(row.phone,'+919876543210');assert.equal(row.email,'customer@example.com');assert.equal(row.items[0].productName,'Sparklers');assert.equal(row.estimated_total_minor,5000);assert.equal(row.request_hash,undefined);assert.equal(row.items_json,undefined)}
++ }
++ assert.equal(ids.size,125)
++})
++test('anonymous and buyer accounts cannot read query contact data',async()=>{
++ const {db,queriesDb,cookie}=await fixture();assert.equal((await handleApi(request('/api/product-queries'),db,{queriesDb})).status,401)
++ const state=ensureState(seedState(1700000000000));await handleState('PUT',{revision:0,state},db)
++ const credentials={email:'buyer@example.com',password:'test-buyer-password-123'}
++ const created=await handleApi(new Request('https://shop.example/api/auth/buyers',{method:'POST',headers:{'content-type':'application/json',cookie},body:JSON.stringify({...credentials,buyerId:state.buyers[0].id})}),db)
++ assert.equal(created.status,201)
++ const logged=await handleApi(new Request('https://shop.example/api/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(credentials)}),db)
++ assert.equal((await handleApi(request('/api/product-queries',logged.headers.get('set-cookie')!.split(';')[0]),db,{queriesDb})).status,403)
++})
++test('search and status filters search the database and pagination validates inputs',async()=>{
++ const {db,queriesDb,cookie}=await fixture()
++ for(const suffix of ['q=Special+city','status=contacted']){const data=await (await handleApi(request(`/api/product-queries?${suffix}`,cookie),db,{queriesDb})).json();assert.equal(data.total,1);assert.equal(data.queries[0].id,'query-000')}
++ const search=await (await handleApi(request('/api/product-queries?q=Sparklers',cookie),db,{queriesDb})).json();assert.equal(search.total,125)
++ const literal=await (await handleApi(request('/api/product-queries?q=%25',cookie),db,{queriesDb})).json();assert.equal(literal.total,0)
++ for(const suffix of ['page=-1','page=NaN','status=unknown'])assert.equal((await handleApi(request(`/api/product-queries?${suffix}`,cookie),db,{queriesDb})).status,400)
++ assert.equal((await handleApi(request('/api/product-queries',cookie),db)).status,503)
++})
++test('malformed item snapshots do not hide the remaining query records',async()=>{
++ const {db,queriesDb,cookie}=await fixture();await queriesDb.batch([{sql:'UPDATE "product query" SET items_json=? WHERE id=?',params:['invalid-json','query-124']}])
++ const data=await (await handleApi(request('/api/product-queries',cookie),db,{queriesDb})).json();assert.equal(data.queries[0].itemsError,true);assert.equal(data.queries.length,50)
++})
+--- /dev/null
++++ b/src/views/QueriesView.tsx
+@@ -0,0 +1,40 @@
++import { useEffect, useState } from 'react'
++import { formatWhen } from '../format'
++import './QueriesView.css'
++type Item = { productId:string;productName:string;variantId:string;variantName:string;sku:string;quantity:number;sellingUnit:string;itemsPerBox:number;unitPriceMinor:number;totalMinor:number }
++type Query = {id:string;name:string;phone:string;email:string;location:string;status:string;created_at:string;estimated_total_minor:number;items:Item[];itemsError:boolean}
++type Result = {queries:Query[];total:number;page:number;pageSize:number}
++const money=(minor:number)=>new Intl.NumberFormat('en-IN',{style:'currency',currency:'INR'}).format(minor/100)
++export function QueriesView() {
++  const [result,setResult]=useState<Result>({queries:[],total:0,page:1,pageSize:50})
++  const [draft,setDraft]=useState(''),[search,setSearch]=useState(''),[status,setStatus]=useState('')
++  const [page,setPage]=useState(1),[refresh,setRefresh]=useState(0)
++  const [loading,setLoading]=useState(true),[error,setError]=useState('')
++  useEffect(()=>{
++    const controller=new AbortController();setLoading(true);setError('')
++    const params=new URLSearchParams({page:String(page),q:search,status})
++    void fetch(`/api/product-queries?${params}`,{credentials:'same-origin',cache:'no-store',signal:controller.signal}).then(async response=>{
++      const body=await response.json();if(!response.ok)throw new Error(body.error||'Unable to load product queries.')
++      if(!Array.isArray(body.queries))throw new Error('Unexpected query response.')
++      if(!controller.signal.aborted)setResult(body)
++    }).catch(error=>{if(!controller.signal.aborted)setError(error instanceof Error?error.message:'Unable to load product queries.')}).finally(()=>{if(!controller.signal.aborted)setLoading(false)})
++    return()=>controller.abort()
++  },[page,search,status,refresh])
++  return <section className="queries-view" data-testid="view-query">
++    <div className="page-head"><div><h2>Product queries</h2><p className="lede">Website enquiries, contact details and the products selected at submission.</p></div><button type="button" className="btn secondary" disabled={loading} onClick={()=>setRefresh(n=>n+1)}>Refresh</button></div>
++    <form className="query-filters" onSubmit={event=>{event.preventDefault();setPage(1);setSearch(draft.trim());setRefresh(n=>n+1)}}>
++      <label className="field">Search<input type="search" maxLength={200} value={draft} onChange={event=>setDraft(event.target.value)} placeholder="Name, phone, email, location, product or reference"/></label>
++      <label className="field">Status<select value={status} onChange={event=>{setStatus(event.target.value);setPage(1)}}><option value="">All statuses</option><option value="new">New</option><option value="contacted">Contacted</option><option value="closed">Closed</option></select></label>
++      <button className="btn" type="submit" disabled={loading}>Search</button>
++    </form>
++    {loading&&<p role="status">Loading queries…</p>}{error&&<div className="error" role="alert"><p>{error}</p><button className="btn secondary" type="button" onClick={()=>setRefresh(n=>n+1)}>Try again</button></div>}
++    {!loading&&!error&&<><p className="query-count" role="status">{result.total?`${(result.page-1)*result.pageSize+1}–${Math.min(result.page*result.pageSize,result.total)} of ${result.total} queries`:'No queries found.'}</p>
++    {result.queries.map(query=><details className="query-record" key={query.id}>
++      <summary><span><strong>{query.name}</strong><span>{query.phone} · {formatWhen(query.created_at)}</span></span><span className="query-status">{query.status}</span><strong>{money(query.estimated_total_minor)}</strong><span>View details</span></summary>
++      <div className="query-record-body"><dl className="query-contact-details"><div><dt>Reference</dt><dd>{query.id}</dd></div><div><dt>Name</dt><dd>{query.name}</dd></div><div><dt>Phone</dt><dd>{query.phone}</dd></div><div><dt>Email</dt><dd>{query.email||'Not provided'}</dd></div><div><dt>Location</dt><dd>{query.location||'Not provided'}</dd></div><div><dt>Submitted</dt><dd>{formatWhen(query.created_at)}</dd></div></dl>
++      {query.itemsError?<p role="alert">The saved product details could not be read.</p>:<div className="query-products"><table><caption>Selected products</caption><thead><tr><th>Product / variant</th><th>SKU</th><th>Quantity</th><th>Unit price</th><th>Total</th></tr></thead><tbody>{query.items.map((item,index)=><tr key={`${item.variantId}-${index}`}><td><strong>{item.productName}</strong><br/>{item.variantName}</td><td>{item.sku||'—'}</td><td>{item.quantity} {item.sellingUnit==='box'?`box(es), ${item.itemsPerBox} pieces per box`:'piece(s)'}</td><td>{money(item.unitPriceMinor)}</td><td>{money(item.totalMinor)}</td></tr>)}</tbody><tfoot><tr><th colSpan={4}>Estimated total at submission</th><td>{money(query.estimated_total_minor)}</td></tr></tfoot></table></div>}
++      </div></details>)}
++    {result.total>result.pageSize&&<nav className="query-pages" aria-label="Query pages"><button className="btn secondary" type="button" disabled={result.page<=1} onClick={()=>setPage(result.page-1)}>Previous</button><span>Page {result.page} of {Math.ceil(result.total/result.pageSize)}</span><button className="btn secondary" type="button" disabled={result.page*result.pageSize>=result.total} onClick={()=>setPage(result.page+1)}>Next</button></nav>}
++    {!result.total&&!search&&!status&&<p>Product queries will appear here after customers submit them on the website.</p>}</>}
++  </section>
++}
+--- /dev/null
++++ b/src/views/QueriesView.css
+@@ -0,0 +1 @@
++.query-filters{display:flex;gap:16px;align-items:end;flex-wrap:wrap;margin:24px 0}.query-filters>.field:first-child{flex:1;min-width:220px}.query-filters .field{display:grid;gap:8px}.query-filters input,.query-filters select{min-height:42px}.query-count{margin-bottom:18px}.query-record{border:1px solid var(--line,#39414a);border-radius:10px;margin:14px 0;overflow:hidden}.query-record>summary{display:flex;align-items:center;gap:18px;cursor:pointer;padding:20px;list-style:none}.query-record>summary>span:first-child{flex:1;min-width:0}.query-record>summary>span:first-child>span{display:block;margin-top:6px;font-size:.85rem}.query-record>summary:focus-visible{outline:2px solid currentColor;outline-offset:-3px}.query-status{text-transform:capitalize;font-size:.8rem;border:1px solid currentColor;border-radius:5px;padding:4px 8px}.query-record-body{padding:0 20px 20px}.query-contact-details{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;padding:20px 0;border-top:1px solid var(--line,#39414a)}.query-contact-details dt{font-size:.8rem;opacity:.7;margin-bottom:6px}.query-contact-details dd{margin:0;overflow-wrap:anywhere}.query-products{overflow-x:auto}.query-products table{width:100%;min-width:620px;border-collapse:collapse}.query-products caption{text-align:left;font-weight:600;padding:12px 0}.query-products th,.query-products td{text-align:left;padding:12px;border-bottom:1px solid var(--line,#39414a)}.query-pages{display:flex;align-items:center;justify-content:center;gap:20px;margin-top:24px}@media(max-width:650px){.query-contact-details{grid-template-columns:1fr}.query-record>summary{flex-wrap:wrap;padding:16px;gap:12px}.query-record>summary>span:first-child{flex-basis:100%}.query-record-body{padding:0 16px 16px}.query-filters>.field:first-child{min-width:100%}}

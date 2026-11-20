@@ -16,7 +16,7 @@ with sqlite3.connect(sys.argv[1], timeout=10) as db:
 export async function localReviewsDatabase() {
   const directory = path.join(process.cwd(), '.data');
   await mkdir(directory, { recursive: true });
-  const schema = await readFile(path.join(process.cwd(), 'migrations/reviews/0001_reviews.sql'), 'utf8');
+  const schema = (await Promise.all(['0001_reviews.sql', '0002_customer_profiles.sql', '0003_product_query.sql'].map(file => readFile(path.join(process.cwd(), 'migrations/reviews', file), 'utf8')))).join('\n');
   async function query<T>(sql: string, values: unknown[] = []): Promise<T[]> {
     const { stdout } = await execute('python3', ['-c', script, path.join(directory, 'reviews.sqlite'), JSON.stringify({ schema, sql, values })], { maxBuffer: 1024 * 1024, timeout: 15000 });
     return JSON.parse(stdout);

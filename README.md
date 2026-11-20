@@ -20,17 +20,11 @@ That Worker reads the existing Cloudflare D1 database. No Cloudflare token, data
 
 The existing catalogue stores per-piece prices. A box-selling variant costs `price × itemsPerBox`; an item-selling variant uses `price` directly. Stock is not disclosed by the public API, so availability must be confirmed with the shop.
 
-## WhatsApp buying
+## Product queries
 
-Customers select variants, add products, adjust quantities, and click **Order on WhatsApp**. Current prices are fetched again; customers review the updated total and click **Continue to WhatsApp**. The final message is sent only when the customer presses Send in WhatsApp. This website does not collect payments, reserve stock or create D1 order records.
+Customers select variants, add products and quantities to their bag, provide their name and phone number (required), and optionally email and location. **Place query** performs reCAPTCHA v3 verification and saves the query in the `product query` table through `/api/product-query`. It uses current server-side catalogue prices and stores the selected product/variant names, SKUs, units, quantities and estimated total. No WhatsApp message or payment is created. Successful persistence shows **we will contact you soon**. Errors retain the bag and contact fields. Retries use the same submission ID to avoid duplicates.
 
-Set the shop WhatsApp number in the existing management app's seller profile, or create `.env.local` with:
-
-```env
-SHOP_WHATSAPP=your_international_number
-```
-
-Use country code and digits only, without spaces. Restart the dev server after changing environment variables. Checkout stays unavailable while no valid number is configured. The catalogue verified during implementation had no saved WhatsApp number.
+Apply `migrations/reviews/0003_product_query.sql` to `REVIEWS_DB` before deploying. The local SQLite adapter initializes the table automatically. Query records and contact details have no public read endpoint. General WhatsApp contact links still use the configured shop number.
 
 ## Content and SEO
 
@@ -68,13 +62,13 @@ npm run typecheck
 npm run build
 ```
 
-Cart tests cover box/piece pricing, rounding, refreshed prices, message contents, invalid quantities, deleted variants and WhatsApp number validation. HTTP checks verify the live catalogue and rendered page. Interactive browser verification was unavailable because the browser tool could not initialize in this environment.
+Tests cover box/piece pricing, rounding, current prices, invalid quantities, query persistence, duplicate submissions, CAPTCHA rejection, and contact validation. HTTP checks verify the live catalogue and rendered page. Interactive browser verification was unavailable because the browser tool could not initialize in this environment.
 
 ## Order security (Google reCAPTCHA v3)
 
 Register a v3 site at https://www.google.com/recaptcha/admin/create with the production hostname and `localhost` for local testing. Add `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` and `RECAPTCHA_SECRET_KEY` to `.env.local`, using `.env.example` as a reference. Use v3 keys, not v2 or Enterprise-only keys. Set `NEXT_PUBLIC_SITE_URL` to the actual public origin for production hostname verification. Configure the secret on the production server and the public key before building; restart development after changing keys. Never commit the secret.
 
-Clicking Order runs the `place_order` action and posts its token and cart to `/api/checkout`. The server verifies success, action, hostname, token age and a score of at least 0.5 before fetching current prices and generating the WhatsApp link. Missing configuration, failed verification or Google downtime blocks checkout; each retry obtains a new token. Cart changes discard any previously prepared order link. The Google badge remains visible. This protects the website checkout flow; WhatsApp messages are still sent by the customer in WhatsApp.
+Clicking Place query runs the `place_query` action and posts a fresh token, submission ID, cart and contact details to `/api/product-query`. The server verifies success, action, hostname, age and score (at least 0.5) before saving. Missing configuration or failed verification blocks the submission. Login uses separate `customer_login_send` and `customer_login_verify` actions with the same keys.
 
 ## Customer phone login
 
@@ -97,6 +91,16 @@ Reviews use the dedicated Cloudflare D1 database `baji-market-reviews`, bound as
 - Remote database: `npx wrangler d1 migrations apply REVIEWS_DB --remote`
 - Deploy the updated Worker with `npm run deploy` to publish the routes and binding.
 
-`Add review` checks the customer session and opens phone login when needed. Successful verification resumes the review form. The API revalidates the customer with Supabase; browser state alone never authorizes a write. Each verified customer can publish or update one review. Public responses include only the display name, rating, review text, ID and timestamps, never phone numbers or authentication IDs. The latest 50 reviews replace the sample carousel. Local development uses a separate local D1 instance, not the remote database.
+`Add review` checks the customer session and opens phone login when needed. Successful verification resumes the review form. The API revalidates the customer with Supabase; browser state alone never authorizes a write. Each verified customer can publish or update one review. Public responses include only the display name, rating, review text, ID and timestamps, never phone numbers or authentication IDs. The latest 50 database reviews populate the carousel; loading, empty and error states never show sample quotes. Local development uses a separate local D1 instance, not the remote database.
 
 On macOS 12, which cannot run Cloudflare's local runtime, `next dev` uses `.data/reviews.sqlite` through the installed Python 3 SQLite library. The schema is initialized automatically; records remain local. Supported development systems use Wrangler's local D1 database. Production always uses the separate remote D1 binding.
+
+## Web management
+
+Website content is edited at the seller app's `#/seller/web-management` tab. `src/lib/web-content.ts` fetches `/api/web-content` from the same origin as the product catalog, without credentials or caching. The page renders saved copy, metadata, banner media, gallery items, FAQs and extra sections. Initial content in `src/data/web-content.ts` is a fallback only when the content service cannot be reached. Empty saved lists remain empty. Images uploaded in the manager are served by the catalog Worker; banner Drive videos remain restricted to IDs present in the saved slider list. Testimonials continue using the separate reviews database.
+
+### Customer profile fields
+
+The phone-login form requires a name and a 10-digit Indian phone number (fixed +91). Email and location are optional. The server validates all fields and saves them in `customer_profiles`, in the existing `REVIEWS_DB` database, only after Supabase verifies the phone. Profiles use the verified Supabase account ID, never a browser-supplied identifier, and are returned only through that customer's authenticated session. Repeated sign-ins update the same profile. Profile-save failures do not create a local signed-in session.
+
+Before deploying this change, apply `migrations/reviews/0002_customer_profiles.sql` to the remote `baji-market-reviews` database. The local macOS SQLite adapter initializes it automatically. Working phone authentication still requires Supabase credentials and SMS configuration; adding profile fields does not replace OTP verification.

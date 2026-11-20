@@ -8,7 +8,7 @@ export const site = {
 };
 
 export const faqs = [
-  { question: "How do I buy a product?", answer: "Choose your preferred variant, add it to your bag and select Order on WhatsApp. We refresh the catalogue prices before preparing your message. Review the total, continue to WhatsApp and press Send to share your order request with the shop." },
-  { question: "Do I pay on this website?", answer: "No payment is collected here. The shop confirms availability, final pricing and payment or collection arrangements directly on WhatsApp. Sending a cart does not automatically reserve stock." },
+  { question: "How do I buy a product?", answer: "Choose your preferred variants, add them to your bag, enter your contact details and select Place query. After the security check, your query is saved and the shop will contact you." },
+  { question: "Do I pay on this website?", answer: "No payment is collected here. The shop will contact you to confirm availability, final pricing and payment or collection arrangements. Submitting a query does not reserve stock." },
   { question: "Are prices per piece or per box?", answer: "Each variant shows its selling unit. For box items, the displayed price covers all the pieces in that box. Choose a variant to see its price and pack size before adding it to your bag." },
 ];

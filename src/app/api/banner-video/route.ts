@@ -1,13 +1,10 @@
-const VIDEO_IDS = new Set([
-  '1VIFSHeXNrz0uLuugzlPBy9OIC8kHGOCF',
-  '12zkM7CRfm6Oq6cDVDMFQo_wiF_zbKR6I',
-  '1nZQ489DgKAsjVAnaNdfJg3ndVujgBsX-',
-  '1-0cWzrI4DeMdxKBJPyggBdM004oT85zZ',
-]);
+import { getWebContent } from "@/lib/web-content";
 
 export async function GET(request: Request) {
   const id = new URL(request.url).searchParams.get('id');
-  if (!id || !VIDEO_IDS.has(id)) return new Response('Invalid video', { status: 400 });
+  const content = await getWebContent();
+  const allowed = content.slides.some(slide => slide.type === 'video' && slide.src === `/api/banner-video?id=${id}`);
+  if (!id || !/^[\w-]+$/.test(id) || !allowed) return new Response('Invalid video', { status: 400 });
 
   const range = request.headers.get('range');
   if (range && !/^bytes=\d*-\d*$/.test(range)) {

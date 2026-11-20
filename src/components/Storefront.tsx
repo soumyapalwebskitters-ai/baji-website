@@ -3,35 +3,13 @@
 import { useMotionPreference } from "@/hooks/useMotionPreference";
 import { useRef, useState } from 'react';
 import Script from 'next/script';
+import { executeRecaptcha, recaptchaSiteKey } from '@/lib/recaptcha-client';
 import VariantDropdown from '@/components/VariantDropdown';
 import QuantityStepper from '@/components/QuantityStepper';
 import { RollingText } from '@/components/RollingText';
 import { AnimatePresence, motion } from 'framer-motion';
 import { money, resolveCart, unitPrice, type CartLine, type Catalog, type Product } from '@/lib/commerce';
 
-const recaptchaSiteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || '';
-declare global {
-  interface Window {
-    grecaptcha?: { ready: (callback: () => void) => void; execute: (key: string, options: { action: string }) => Promise<string> };
-  }
-}
-async function orderToken(): Promise<string> {
-  const api = window.grecaptcha;
-  if (!recaptchaSiteKey) throw new Error('reCAPTCHA is unavailable. Your order has not been submitted. Please try again later.');
-  if (!api) throw new Error('reCAPTCHA could not load. Please reload the page and try again.');
-  return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error('Security check timed out. Please try again.')), 15000);
-    api.ready(() => {
-      Promise.resolve().then(() => api.execute(recaptchaSiteKey, { action: 'place_order' }))
-        .then((token) => {
-          if (!token) throw new Error('reCAPTCHA did not complete. Please try again.');
-          resolve(token);
-        })
-        .catch(() => reject(new Error('reCAPTCHA verification failed. Your order has not been submitted. Please try again.')))
-        .finally(() => window.clearTimeout(timer));
-    });
-  });
-}
 
 function ProductCard({ product, index, add }: { product: Product; index: number; add: (id: string) => void }) {
   const reduce = useMotionPreference();
@@ -60,54 +38,62 @@ export default function Storefront({ initialCatalog }: { initialCatalog: Catalog
   const [cart, setCart] = useState<CartLine[]>([]);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
-  const [checkout, setCheckout] = useState('');
-  const cartRevision = useRef(0);
+  const [contact, setContact] = useState({ name: '', phone: '', email: '', location: '' });
+  const requestId = useRef<string | null>(null);
   const submitting = useRef(false);
   const [error, setError] = useState('');
   const products = catalog?.products.filter((p) => p.variants.length && (!productId || p.id === productId) && `${p.name} ${p.variants.map((v) => `${v.name} ${v.sku}`).join(' ')}`.toLowerCase().includes(query.toLowerCase().trim())).map((p) => ({ ...p, variants: p.variants.filter((v) => unit === 'all' || v.sellingUnit === unit) })).filter((p) => p.variants.length) || [];
   const lines = catalog ? cart.flatMap((line) => { try { return resolveCart(catalog, [line]); } catch { return []; } }) : [];
   const total = lines.reduce((sum, line) => sum + Math.round(line.total * 100), 0) / 100;
   function update(id: string, quantity: number) {
-    cartRevision.current += 1;
-    setCheckout(''); setError('');
+    if (submitting.current) return;
+    requestId.current = null;
+    setError('');
     setCart((current) => quantity <= 0 ? current.filter((line) => line.variantId !== id) : current.map((line) => line.variantId === id ? { ...line, quantity: Math.min(99, quantity) } : line));
   }
   function add(id: string) {
-    cartRevision.current += 1;
-    setCheckout(''); setError('');
+    if (submitting.current) return;
+    requestId.current = null;
+    setError('');
     setCart((current) => current.some((line) => line.variantId === id) ? current.map((line) => line.variantId === id ? { ...line, quantity: Math.min(99, line.quantity + 1) } : line) : [...current, { variantId: id, quantity: 1 }]);
     setNotice('Added to your bag. Review it below the collection.');
   }
-  function triggerConfetti(x: number, y: number) {
-    window.dispatchEvent(new CustomEvent("baji:confetti", { detail: { x, y } }));
+  function changeContact(field: keyof typeof contact, value: string) {
+    requestId.current = null;
+    setContact(current => ({ ...current, [field]: value }));
+    setError('');
   }
-
-  async function refresh(forCheckout = false) {
+  async function refresh() {
     if (submitting.current) return;
-    submitting.current = true;
-    const revision = cartRevision.current;
-    setBusy(true); setError(''); setCheckout('');
+    submitting.current = true; setBusy(true); setError('');
     try {
-      const response = forCheckout
-        ? await fetch('/api/checkout', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: await orderToken(), cart }), signal: AbortSignal.timeout(30000),
-        })
-        : await fetch('/api/catalog', { cache: 'no-store' });
+      const response = await fetch('/api/catalog', { cache: 'no-store' });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Please try again.');
-      setCatalog(forCheckout ? result.catalog : result);
-      if (forCheckout && revision === cartRevision.current) {
-        setCheckout(result.checkout);
-        setNotice('Prices refreshed. Review your total, then continue to WhatsApp to send your order request.');
-      }
+      if (!response.ok) throw new Error(result.error || 'Unable to load the collection.');
+      setCatalog(result);
+    } catch (e) { setError(e instanceof Error ? e.message : 'Unable to load the collection.'); }
+    finally { submitting.current = false; setBusy(false); }
+  }
+  async function placeQuery() {
+    if (submitting.current) return;
+    submitting.current = true; setBusy(true); setError(''); setNotice('');
+    try {
+      requestId.current ||= crypto.randomUUID();
+      const response = await fetch('/api/product-query', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: requestId.current, token: await executeRecaptcha('place_query'), cart, contact: { ...contact, phone: `+91${contact.phone}` } }),
+        signal: AbortSignal.timeout(30000),
+      });
+      const result = await response.json();
+      if (!response.ok || typeof result.queryId !== 'string') throw new Error(result.error || 'Unable to confirm your query. Please try again.');
+      setCart([]); requestId.current = null;
+      setNotice('we will contact you soon');
     } catch (e) {
       setError(e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')
-        ? 'The order check timed out. Your order has not been submitted. Please try again.'
+        ? 'We could not confirm your submission in time. Please retry; the same query will not be saved twice.'
         : e instanceof TypeError ? 'Could not connect. Check your internet connection and try again.'
-        : e instanceof Error ? e.message : 'Unable to verify your order. Please try again.');
-    }
-    finally { submitting.current = false; setBusy(false); }
+        : e instanceof Error ? e.message : 'Unable to save your query. Please try again.');
+    } finally { submitting.current = false; setBusy(false); }
   }
 
   if (!catalog) return <div className="empty-state"><h3>The collection is taking a moment.</h3><p>We couldn’t connect to the shop. Please try again.</p><button className="button" disabled={busy} onClick={() => refresh()}>{busy ? 'Loading…' : 'Try again'}</button>{error && <p role="alert">{error}</p>}</div>;
@@ -116,7 +102,7 @@ export default function Storefront({ initialCatalog }: { initialCatalog: Catalog
     <div className="collection-tools"><div className="filters" role="group" aria-label="Filter selling units">{[['all', 'All products'], ['item', 'By the piece'], ['box', 'By the box']].map(([value, label]) => <button key={value} className={`filter ${unit === value ? 'active' : ''}`} aria-pressed={unit === value} onClick={() => setUnit(value)}>{unit === value && <motion.span className="filter-highlight" layoutId="active-unit-filter" transition={{ duration: reduce ? 0 : .3, ease: [.22, 1, .36, 1] }} />}<span className="filter-label">{label}</span></button>)}</div><div className="product-filter"><VariantDropdown label="Search products" placeholder="search product" value={productId} searchValue={query} onSearchChange={(text) => { setQuery(text); setProductId(''); }} onChange={(id) => { setProductId(id); setQuery(catalog.products.find((product) => product.id === id)?.name || ''); }} options={catalog.products.filter((product) => product.variants.some((variant) => unit === 'all' || variant.sellingUnit === unit) && `${product.name} ${product.variants.map((variant) => `${variant.name} ${variant.sku}`).join(' ')}`.toLowerCase().includes(query.toLowerCase().trim())).map((product) => ({ value: product.id, label: product.name, detail: '' }))} /></div><a className="bag-link" href="#bag">Your bag ({cart.reduce((sum, line) => sum + line.quantity, 0)})</a></div>
     <p className="sr-only" aria-live="polite">{products.length} products found</p><motion.div layout={!reduce} className="product-grid"><AnimatePresence initial={false}>{products.map((product, index) => <ProductCard key={`${product.id}-${unit}`} product={product} index={index} add={add} />)}</AnimatePresence></motion.div>
     {!products.length && <div className="empty-state"><p>No products match your search.</p><button className="button" onClick={() => { setQuery(''); setUnit('all'); setProductId(''); }}>Show all products</button></div>}
-    <p className="catalog-note">Prices from the shop’s current catalogue. Availability and final totals are confirmed by the shop on WhatsApp.</p>
+    <p className="catalog-note">Prices from the shop’s current catalogue. Availability and final totals are confirmed by the shop after your query.</p>
     <motion.section initial={reduce ? false : { opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: reduce ? 0 : .5 }} id="bag" className="shopping-bag" aria-label="Shopping bag"><div className="bag-heading"><div><span className="eyebrow">YOUR CELEBRATION, COLLECTED</span><h3>Your bag <em>of joy.</em></h3></div><motion.span key={cart.reduce((sum, line) => sum + line.quantity, 0)} initial={reduce ? false : { scale: 1.15, opacity: .5 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: .25 }}>{cart.reduce((sum, line) => sum + line.quantity, 0)} selected</motion.span></div>
       <p className="cart-notice" role="status">{notice}</p>
       <AnimatePresence initial={false} mode="wait">{cart.length === 0 ? <motion.p key="empty" className="empty-bag" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduce ? 0 : .15 }}>A little empty, for now. Add something you love from the collection.</motion.p> : <motion.div key="items" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduce ? 0 : .2 }}>
@@ -125,10 +111,22 @@ export default function Storefront({ initialCatalog }: { initialCatalog: Catalog
           if (!line) return <div className="cart-line" key={entry.variantId}><p>This item is no longer available.</p><button onClick={() => update(entry.variantId, 0)}>Remove unavailable item</button></div>;
           return <motion.div layout={!reduce} className="cart-line" key={line.variantId} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0, paddingTop: 0, paddingBottom: 0, overflow: "hidden" }} transition={{ duration: reduce ? 0 : .25 }}><div><h4>{line.product.name}</h4><p>{line.variant.name} · {money(line.price)} / {line.variant.sellingUnit === 'box' ? `box (${line.variant.itemsPerBox} pieces)` : 'piece'}</p></div><QuantityStepper value={line.quantity} label={`${line.product.name} ${line.variant.name}`} onChange={quantity => update(line.variantId, quantity)} /><strong>{money(line.total)}</strong><button className="remove-item" onClick={() => update(line.variantId, 0)} aria-label={`Remove ${line.product.name} ${line.variant.name}`}>Remove</button></motion.div>;
         })}</AnimatePresence>
-        <div className="cart-total"><span>Estimated total</span><motion.strong key={total} initial={reduce ? false : { opacity: .5, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .2 }}>{money(total)}</motion.strong></div><p className="cart-help">Send your bag to the shop to confirm your order. No payment is collected on this website.</p>
-        {(error || !recaptchaSiteKey) && <p className="cart-error" role="alert">{error || "reCAPTCHA is unavailable. Ordering is temporarily disabled. Please try again later."}</p>}
-        {checkout ? <a className="button whatsapp" href={checkout} target="_blank" rel="noopener noreferrer" onClick={(e) => { triggerConfetti(e.clientX, e.clientY); }}>Continue to WhatsApp</a> : <button className="button whatsapp" disabled={busy || !recaptchaSiteKey || lines.length !== cart.length} onClick={() => { void refresh(true); }}>{busy ? 'Verifying and checking prices…' : 'Order on WhatsApp'}</button>}
-        <p className="cart-help">Your order is only sent when you press Send in WhatsApp.</p>
+        <div className="cart-total"><span>Estimated total</span><motion.strong key={total} initial={reduce ? false : { opacity: .5, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .2 }}>{money(total)}</motion.strong></div><p className="cart-help">Submit your selected products as a query. No payment is collected on this website.</p>
+        <form onSubmit={event => { event.preventDefault(); void placeQuery(); }}>
+          <fieldset className="query-contact" disabled={busy}>
+            <legend>Your contact details</legend>
+            <label>Name (required)<input autoComplete="name" required minLength={2} maxLength={80} value={contact.name} onChange={event => changeContact('name', event.target.value)} /></label>
+            <label>Phone number (required)<span className="query-phone"><span aria-hidden="true">+91</span><input type="tel" inputMode="numeric" autoComplete="tel-national" aria-label="Phone number, country code +91" required pattern="[0-9]{10}" value={contact.phone} onChange={event => {
+              const digits = event.target.value.replace(/\D/g, '');
+              changeContact('phone', (digits.length === 12 && digits.startsWith('91') ? digits.slice(2) : digits).slice(0, 10));
+            }} /></span></label>
+            <label>Email (optional)<input type="email" autoComplete="email" maxLength={254} value={contact.email} onChange={event => changeContact('email', event.target.value)} /></label>
+            <label>Location (optional)<input autoComplete="address-level2" maxLength={200} value={contact.location} onChange={event => changeContact('location', event.target.value)} /></label>
+          </fieldset>
+          {(error || !recaptchaSiteKey) && <p className="cart-error" role="alert">{error || 'reCAPTCHA is unavailable. Please try again later.'}</p>}
+          <button type="submit" className="button place-query" disabled={busy || !recaptchaSiteKey || lines.length !== cart.length}>{busy ? 'Submitting…' : 'Place query'}</button>
+          <p className="cart-help">Protected by reCAPTCHA. Google’s <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a> and <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> apply.</p>
+        </form>
       </motion.div>}</AnimatePresence>
     </motion.section>
   </>;

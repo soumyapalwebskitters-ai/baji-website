@@ -13,3 +13,12 @@ test('rejects failed, wrong-action, wrong-host, low-score, expired and malformed
     assert.equal(validRecaptcha(value, 'shop.example', now), false);
   }
 });
+
+test('login actions cannot reuse checkout or another login-step token',()=>{
+ for(const action of ['customer_login_send','customer_login_verify']) {
+  assert.equal(validRecaptcha({...valid,action},'shop.example',now,action),true);
+  assert.equal(validRecaptcha(valid,'shop.example',now,action),false);
+  assert.equal(validRecaptcha({...valid,action},'shop.example',now),false);
+ }
+ assert.equal(validRecaptcha({...valid,action:'customer_login_send'},'shop.example',now,'customer_login_verify'),false);
+});

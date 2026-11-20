@@ -87,7 +87,7 @@ export default function Storefront({ initialCatalog }: { initialCatalog: Catalog
       const result = await response.json();
       if (!response.ok || typeof result.queryId !== 'string') throw new Error(result.error || 'Unable to confirm your query. Please try again.');
       setCart([]); requestId.current = null;
-      setNotice('we will contact you soon');
+      setNotice('Thank you,\nwe will contact you soon');
     } catch (e) {
       setError(e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError')
         ? 'We could not confirm your submission in time. Please retry; the same query will not be saved twice.'

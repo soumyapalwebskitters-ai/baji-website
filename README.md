@@ -75,3 +75,28 @@ Cart tests cover box/piece pricing, rounding, refreshed prices, message contents
 Register a v3 site at https://www.google.com/recaptcha/admin/create with the production hostname and `localhost` for local testing. Add `NEXT_PUBLIC_RECAPTCHA_SITE_KEY` and `RECAPTCHA_SECRET_KEY` to `.env.local`, using `.env.example` as a reference. Use v3 keys, not v2 or Enterprise-only keys. Set `NEXT_PUBLIC_SITE_URL` to the actual public origin for production hostname verification. Configure the secret on the production server and the public key before building; restart development after changing keys. Never commit the secret.
 
 Clicking Order runs the `place_order` action and posts its token and cart to `/api/checkout`. The server verifies success, action, hostname, token age and a score of at least 0.5 before fetching current prices and generating the WhatsApp link. Missing configuration, failed verification or Google downtime blocks checkout; each retry obtains a new token. Cart changes discard any previously prepared order link. The Google badge remains visible. This protects the website checkout flow; WhatsApp messages are still sent by the customer in WhatsApp.
+
+## Customer phone login
+
+The header supports phone OTP through Supabase Auth. Login remains unavailable until configured; shopping as a guest is unchanged.
+
+1. Create a Supabase project. Enable Phone under Authentication > Providers and configure an SMS provider. See https://supabase.com/docs/guides/auth/phone-login. SMS delivery can incur provider charges.
+2. Add `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` to `.env.local`, then restart `npm run dev`. Use the project publishable key (or legacy anon key), never a service-role key. Set the same variables in the deployed Worker environment for production.
+3. Use six-digit OTP codes. Configure Supabase OTP expiry, resend limits, and rate limits. The UI has a 60-second resend cooldown; Supabase enforces server-side limits.
+4. First use Supabase test phone numbers/codes, then verify real SMS delivery, incorrect/expired code handling, session restoration, and sign-out before launch. This implementation does not bypass verification.
+
+Customer sessions use HTTP-only SameSite cookies (Secure over HTTPS); credentials are verified by Supabase. No seller access is granted.
+
+Testimonial copy in `src/data/testimonials.ts` is explicitly marked as sample content. Replace it with approved customer quotes before publication.
+
+## Customer reviews
+
+Reviews use the dedicated Cloudflare D1 database `baji-market-reviews`, bound as `REVIEWS_DB`; the catalogue database is unchanged. Schema lives in `migrations/reviews`.
+
+- Local database: `npx wrangler d1 migrations apply REVIEWS_DB --local`
+- Remote database: `npx wrangler d1 migrations apply REVIEWS_DB --remote`
+- Deploy the updated Worker with `npm run deploy` to publish the routes and binding.
+
+`Add review` checks the customer session and opens phone login when needed. Successful verification resumes the review form. The API revalidates the customer with Supabase; browser state alone never authorizes a write. Each verified customer can publish or update one review. Public responses include only the display name, rating, review text, ID and timestamps, never phone numbers or authentication IDs. The latest 50 reviews replace the sample carousel. Local development uses a separate local D1 instance, not the remote database.
+
+On macOS 12, which cannot run Cloudflare's local runtime, `next dev` uses `.data/reviews.sqlite` through the installed Python 3 SQLite library. The schema is initialized automatically; records remain local. Supported development systems use Wrangler's local D1 database. Production always uses the separate remote D1 binding.

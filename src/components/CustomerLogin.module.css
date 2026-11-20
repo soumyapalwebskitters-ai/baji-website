@@ -1,0 +1,15 @@
+.loginButton.loginButton{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:24px;padding:8px 16px;font-size:.8rem;white-space:nowrap}
+.dialog{border:0;padding:0;background:transparent;color:var(--ink);width:min(470px,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto}
+.dialog::backdrop{background:#050807b8;backdrop-filter:blur(9px)}
+.panel{position:relative;padding:40px;background:var(--surface);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+.panel h2{font-size:3.2rem;margin-bottom:20px}.panel p{font-size:.9rem;color:var(--muted);margin-bottom:24px}.panel :global(.button){width:100%;margin-top:22px;justify-content:space-between}.panel :global(.eyebrow){margin-bottom:16px}
+.close{position:absolute;top:14px;right:16px;border:0;background:transparent;font-size:1.6rem;width:40px;height:40px}.spark{display:block;font-size:3rem;color:var(--gold);margin-bottom:20px}
+.field{display:grid;gap:8px;font-size:.85rem}.field input{width:100%;min-height:50px;padding:12px 14px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink)}.field input:focus{border-color:var(--accent)}.field small,.note{font-size:.75rem;color:var(--muted)}.note{display:block;text-align:center;margin-top:20px}.secondary{display:flex;justify-content:space-between;gap:16px;margin-top:20px}.secondary button{font-size:.75rem;background:transparent;border:0;padding:6px 0;color:var(--accent)}.panel .error{margin:20px 0 0;font-size:.8rem;color:var(--accent)}
+@media(max-width:760px){.loginButton.loginButton{padding:7px 10px;gap:5px}.panel{padding:30px 24px}.panel h2{font-size:2.7rem}}
+
+.panel .verificationButton{width:auto;max-width:100%;justify-content:center;background:var(--gold);color:#17150d;font-weight:500}
+
+.phoneInput{display:flex;align-items:center;border:1px solid var(--line);border-radius:6px;background:var(--paper);overflow:hidden}
+.phoneInput:focus-within{border-color:var(--accent)}
+.phonePrefix{flex-shrink:0;padding:0 14px;border-right:1px solid var(--line);color:var(--ink)}
+.phoneInput input{min-width:0;border:0;border-radius:0;background:transparent}

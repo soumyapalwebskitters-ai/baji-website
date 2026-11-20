@@ -4,12 +4,31 @@
   "account_id": "147e736625bc5a6ef94fc50fc615c944",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-11-18",
-  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "compatibility_flags": [
+    "nodejs_compat",
+    "global_fetch_strictly_public"
+  ],
   "workers_dev": true,
   "keep_vars": true,
-  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
-  "services": [{ "binding": "WORKER_SELF_REFERENCE", "service": "baji-market-website" }],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    {
+      "binding": "WORKER_SELF_REFERENCE",
+      "service": "baji-market-website"
+    }
+  ],
   "vars": {
     "NEXT_PUBLIC_SITE_URL": "https://baji-market-website.soumya-pal-webskitters.workers.dev"
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "REVIEWS_DB",
+      "database_name": "baji-market-reviews",
+      "database_id": "89aba547-ec24-4260-a721-01b53dc78c34",
+      "migrations_dir": "migrations/reviews"
+    }
+  ]
 }

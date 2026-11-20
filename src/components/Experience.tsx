@@ -7,6 +7,7 @@ import Lenis from "lenis";
 import { RollingLink } from "@/components/RollingText";
 import { animate, hover, inView, motion, stagger } from "framer-motion";
 import RevealHeading from "@/components/RevealHeading";
+import CustomerLogin from "@/components/CustomerLogin";
 import FloatingTarget from "@/components/FloatingTarget";
 import type { Catalog } from "@/lib/commerce";
 import { whatsappNumber } from "@/lib/commerce";
@@ -81,11 +82,11 @@ export function Navigation() {
   }
   return <motion.header className="header" initial={reduce ? false : { y: -12, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: reduce ? 0 : .5 }}>
     <a href="#home" className="brand" aria-label="Baji Market home"><motion.span className="brand-symbol" aria-hidden="true" whileHover={reduce ? undefined : { rotate: 90 }} transition={{ duration: .4 }}>✳</motion.span><span>baji<span className="brand-sub">MARKET</span></span></a>
-    <nav id="main-nav" aria-label="Main navigation" className="nav" onClick={() => setOpen(false)}><a href="#collection">Collection</a><a href="#about">Our story</a><a href="#gallery">Gallery</a><a href="#faq">Good to know</a></nav>
-    <div className="nav-controls"><div className="text-controls" role="group" aria-label="Text size"><button aria-label="Decrease text size" disabled={size <= 90} onClick={() => changeSize(Math.max(90, size - 5))}>A−</button><span className="sr-only" role="status">Text size {size}%</span><button aria-label="Increase text size" disabled={size >= 125} onClick={() => changeSize(Math.min(125, size + 5))}>A+</button></div><button className="theme-toggle" onClick={changeTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}>{theme === 'dark' ? '☀' : '☾'}</button><a className="nav-bag" href="#bag" aria-label="View shopping bag">Bag</a></div>
+    <nav id="main-nav" aria-label="Main navigation" className="nav" onClick={() => setOpen(false)}><a href="#collection">Collection</a><a href="#about">Our story</a><a href="#gallery">Gallery</a><a href="#testimonials">Testimonials</a><a href="#faq">Good to know</a></nav>
+    <div className="nav-controls"><div className="text-controls" role="group" aria-label="Text size"><button aria-label="Decrease text size" disabled={size <= 90} onClick={() => changeSize(Math.max(90, size - 5))}>A−</button><span className="sr-only" role="status">Text size {size}%</span><button aria-label="Increase text size" disabled={size >= 125} onClick={() => changeSize(Math.min(125, size + 5))}>A+</button></div><button className="theme-toggle" onClick={changeTheme} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}>{theme === 'dark' ? '☀' : '☾'}</button><CustomerLogin /></div>
     <button className="menu-toggle" type="button" aria-expanded={open} aria-controls="mobile-nav" onClick={() => setOpen(!open)}>{open ? 'Close −' : 'Menu +'}</button>
     <motion.nav id="mobile-nav" className="mobile-nav" aria-label="Mobile navigation" aria-hidden={!open} inert={!open} initial={false} animate={{ height: open ? 'auto' : 0, opacity: open ? 1 : 0 }} transition={{ duration: reduce ? 0 : .35, ease: [.22, 1, .36, 1] }}>
-      <div className="mobile-nav-links">{[['#collection', 'Collection'], ['#about', 'Our story'], ['#gallery', 'Gallery'], ['#faq', 'Good to know'], ['#bag', 'Your bag']].map(([href, label], index) => <motion.a key={href} href={href} onClick={() => setOpen(false)} animate={{ x: open ? 0 : -12, opacity: open ? 1 : 0 }} transition={{ duration: reduce ? 0 : .25, delay: open && !reduce ? index * .045 : 0 }}>{label}</motion.a>)}</div>
+      <div className="mobile-nav-links">{[['#collection', 'Collection'], ['#about', 'Our story'], ['#gallery', 'Gallery'], ['#testimonials', 'Testimonials'], ['#faq', 'Good to know']].map(([href, label], index) => <motion.a key={href} href={href} onClick={() => setOpen(false)} animate={{ x: open ? 0 : -12, opacity: open ? 1 : 0 }} transition={{ duration: reduce ? 0 : .25, delay: open && !reduce ? index * .045 : 0 }}>{label}</motion.a>)}</div>
     </motion.nav>
   </motion.header>;
 }
@@ -176,7 +177,7 @@ export function FireworksBanner() {
     <div className="hero-note"><span className="hero-note-spark" aria-hidden="true">✳</span><p>For the nights<br />you’ll talk about tomorrow.</p></div>
     <motion.button className="launch-skyshot" type="button" whileHover={reducedMotion ? undefined : { scale: 1.04 }} whileTap={reducedMotion ? undefined : { scale: .95 }}>Launch a skyshot <span aria-hidden="true">↑</span></motion.button>
     <div className="hero-slider-controls" role="group" aria-label="Banner slides">
-      {BANNER_SLIDES.map((item, i) => <button key={item.src} type="button" className={`hero-slide-dot${i === index ? ' is-active' : ''}`} aria-label={`Show ${item.type} slide ${i + 1}`} aria-current={i === index ? 'true' : undefined} onClick={() => selectSlide(i)}><motion.span aria-hidden="true" animate={{ scale: i === index ? 1.4 : 1, opacity: i === index ? 1 : .4 }} transition={{ duration: reducedMotion ? 0 : .3 }} /></button>)}
+      {BANNER_SLIDES.map((item, i) => <button key={item.src} type="button" className={`hero-slide-dot${i === index ? ' is-active' : ''}`} aria-label={`Show ${item.type} slide ${i + 1}`} aria-current={i === index ? 'true' : undefined} onClick={() => selectSlide(i)}><motion.span aria-hidden="true" animate={{ width: i === index ? 30 : 8, opacity: i === index ? 1 : .35 }} transition={{ duration: reducedMotion ? 0 : .25 }} /></button>)}
     </div>
     <div className="hero-bottom"><span><i /> THE SKY IS YOUR CANVAS</span><a href="#collection">SCROLL TO DISCOVER</a><span>LIGHT / COLOUR / WONDER</span></div>
   </section>;

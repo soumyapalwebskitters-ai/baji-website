@@ -19,7 +19,7 @@ export default function CustomCursor() {
       if (!fine.matches || reduce) setVisible(false);
     };
     const move = (event: PointerEvent) => {
-      if (!fine.matches || reduce || event.pointerType !== 'mouse' || document.querySelector('dialog[open]')) { setVisible(false); return; }
+      if (!fine.matches || reduce || event.pointerType !== 'mouse') { setVisible(false); return; }
       targetX.set(event.clientX); targetY.set(event.clientY); setVisible(true);
       const el = event.target instanceof Element ? event.target.closest('button,a,input,textarea,[role="option"]') : null;
       setInteractive(Boolean(el)); setLabel(el?.getAttribute('data-cursor-label') || '');

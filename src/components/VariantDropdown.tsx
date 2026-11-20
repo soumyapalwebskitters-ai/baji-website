@@ -6,12 +6,14 @@ import { useMotionPreference } from "@/hooks/useMotionPreference";
 
 type Option = { value: string; label: string; detail: string };
 
-export default function VariantDropdown({ label, value, options, onChange }: {
+export default function VariantDropdown({ label, value, options, onChange, searchValue, onSearchChange, placeholder }: {
   label: string; value: string; options: Option[]; onChange: (value: string) => void;
+  searchValue?: string; onSearchChange?: (value: string) => void; placeholder?: string;
 }) {
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+  const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const search = useRef({ text: '', time: 0 });
   const [open, setOpen] = useState(false);
@@ -25,13 +27,13 @@ export default function VariantDropdown({ label, value, options, onChange }: {
     const option = options[index];
     if (option) onChange(option.value);
     setOpen(false);
-    trigger.current?.focus({ preventScroll: true });
+    (input.current || trigger.current)?.focus({ preventScroll: true });
   }
 
   useEffect(() => {
     if (!open) return;
     const place = () => {
-      const rect = trigger.current?.getBoundingClientRect();
+      const rect = root.current?.getBoundingClientRect();
       if (!rect) return;
       const below = innerHeight - rect.bottom - 16;
       const above = rect.top - 84;
@@ -84,11 +86,24 @@ export default function VariantDropdown({ label, value, options, onChange }: {
   return <div ref={root} className="variant-dropdown" onBlur={event => {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
   }}>
-    <button ref={trigger} type="button" role="combobox" aria-label={label} aria-haspopup="listbox" aria-expanded={open} aria-controls={`${id}-list`} aria-activedescendant={open ? `${id}-option-${active}` : undefined} className="variant-trigger" onClick={() => open ? setOpen(false) : show()} onKeyDown={onKeyDown}>
-      <span>{options[selected]?.label || 'Choose a variant'}</span>
+    {onSearchChange ? <div className="variant-trigger product-search-control">
+      <input ref={input} type="text" role="combobox" aria-label={label} aria-autocomplete="list" aria-expanded={open} aria-controls={`${id}-list`} aria-activedescendant={open && options[active] ? `${id}-option-${active}` : undefined} autoComplete="off" placeholder={placeholder} value={searchValue ?? ''} onFocus={() => show()} onClick={() => setOpen(true)} onChange={event => { onSearchChange(event.target.value); setActive(0); setOpen(true); }} onKeyDown={event => {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          if (!open) show();
+          else if (options.length) setActive(current => (current + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length);
+        } else if (event.key === 'Enter' && open) { event.preventDefault(); choose(active); }
+        else if (event.key === 'Escape') { event.preventDefault(); setOpen(false); }
+        else if (event.key === 'Tab') setOpen(false);
+      }} />
+      {searchValue && <button type="button" aria-label="Clear product search" onClick={() => { onSearchChange(''); setActive(0); input.current?.focus(); setOpen(true); }}>×</button>}
+      <motion.svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" animate={{ rotate: open ? 180 : 0 }} transition={{ duration: reduce ? 0 : .2 }}><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" /></motion.svg>
+    </div> : <button ref={trigger} type="button" role="combobox" aria-label={label} aria-haspopup="listbox" aria-expanded={open} aria-controls={`${id}-list`} aria-activedescendant={open ? `${id}-option-${active}` : undefined} className="variant-trigger" onClick={() => open ? setOpen(false) : show()} onKeyDown={onKeyDown}>
+      <span>{options[selected]?.label || placeholder || 'Choose a variant'}</span>
       <motion.svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" animate={{ rotate: open ? 180 : 0 }} transition={{ duration: reduce ? 0 : .2 }}><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></motion.svg>
-    </button>
+    </button>}
     {open && <motion.ul ref={list} id={`${id}-list`} role="listbox" aria-label={label} className={`variant-options${placement.above ? ' opens-above' : ''}`} style={{ maxHeight: placement.maxHeight }} data-lenis-prevent initial={reduce ? false : { opacity: 0, y: placement.above ? 6 : -6, scale: .98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: reduce ? 0 : .18 }}>
+      {!options.length && <li role="presentation" className="variant-option">No matching products</li>}
       {options.map((option, index) => <li key={option.value} id={`${id}-option-${index}`} role="option" aria-selected={option.value === value} className={`variant-option${active === index ? ' is-highlighted' : ''}`} onPointerMove={() => setActive(index)} onMouseDown={event => event.preventDefault()} onClick={() => choose(index)}>
         <span><span className="variant-option-name">{option.label}</span><span className="variant-option-detail">{option.detail}</span></span><span className="variant-check" aria-hidden="true">{option.value === value ? '✓' : ''}</span>
       </li>)}
